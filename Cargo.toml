@@ -1,0 +1,15 @@
+[package]
+name = "rlox"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+members = [
+  "rlox-common"
+]
+
+[dependencies]
+rlox-common = { path = "rlox-common" }
+
