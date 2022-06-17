@@ -23,6 +23,7 @@ impl<T> Array<T> {
         }
     }
 
+    #[inline]
     pub fn push(&mut self, value: T) {
         if self.needs_to_grow() {
             self.grow_array();
@@ -36,6 +37,7 @@ impl<T> Array<T> {
         self.push(value)
     }
 
+    #[inline]
     pub fn pop(&mut self) -> Option<T> {
         if self.is_empty() {
             return None;
@@ -62,6 +64,7 @@ impl<T> Array<T> {
         }
     }
 
+    #[inline]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.len() {
             unsafe { Some(&*self.ptr().add(index)) }
@@ -70,6 +73,12 @@ impl<T> Array<T> {
         }
     }
 
+    #[inline]
+    pub unsafe fn get_unchecked(&self, index: usize) -> &T {
+        &*self.ptr().add(index)
+    }
+
+    #[inline]
     pub fn get_mut<'a>(&mut self, index: usize) -> Option<&'a mut T> {
         if index < self.len() {
             unsafe { Some(&mut *self.ptr().add(index)) }
@@ -79,7 +88,7 @@ impl<T> Array<T> {
     }
 
     #[inline]
-    fn ptr(&self) -> *mut T {
+    pub fn ptr(&self) -> *mut T {
         self.ptr.as_ptr()
     }
 
@@ -87,14 +96,17 @@ impl<T> Array<T> {
         Layout::array::<T>(self.capacity()).expect("failed to obtain memory layout")
     }
 
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.count == 0
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.count
     }

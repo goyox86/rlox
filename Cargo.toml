@@ -11,5 +11,8 @@ members = [
 ]
 
 [dependencies]
+clap = { version = "3.2.5", features = ["derive"] }
 rlox-common = { path = "rlox-common" }
 
+[profile.release]
+debug = true
