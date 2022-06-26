@@ -1,7 +1,10 @@
 use std::{ptr, result};
 
+use rlox_parser::scanner::Scanner;
+
 use crate::{
     bytecode::{self, Chunk, OpCode},
+    compiler::Compiler,
     value::Value,
 };
 
@@ -21,6 +24,7 @@ impl Default for Options {
 #[derive(Debug)]
 pub(crate) struct Vm {
     chunk: Chunk,
+    source: String,
     ip: *mut u8,
     options: Options,
     stack: Vec<Value>,
@@ -28,17 +32,20 @@ pub(crate) struct Vm {
 
 impl Vm {
     pub fn new(chunk: Chunk, options: Option<Options>) -> Self {
-        println!("{:?}", options);
+        let options = options.unwrap_or_default();
 
         Self {
             chunk,
             ip: ptr::null_mut(),
             stack: Vec::new(),
-            options: options.unwrap_or_default(),
+            options,
+            source: String::new(),
         }
     }
 
-    pub fn interpret(&mut self) -> InterpretResult {
+    pub fn interpret(&mut self, source: String) -> InterpretResult {
+        self.source = source;
+
         match self.chunk.code.get_mut(0) {
             Some(ip) => {
                 self.ip = ip;
@@ -46,6 +53,15 @@ impl Vm {
             }
             None => Err(Error::Runtime("empty bytecode chunk".into())),
         }
+    }
+
+    pub fn compile(&mut self, source: String) -> Result<(), Box<Error>> {
+        self.source = source;
+
+        let compiler = Compiler::new(&self.source);
+        compiler.compile();
+
+        Ok(())
     }
 
     fn run(&mut self) -> InterpretResult {
@@ -57,9 +73,10 @@ impl Vm {
                 self.dissasemble_current_instruction();
             }
 
-            let byte = self.read_byte();
+            let byte: u8 = self.read_byte();
+            let opcode: OpCode = OpCode::from_repr(byte).expect("cannot decode instruction");
 
-            match OpCode::from(byte) {
+            match opcode {
                 OpCode::Return => {
                     println!("{}", self.pop());
                     return Ok(());

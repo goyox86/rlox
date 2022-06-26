@@ -7,12 +7,15 @@ edition = "2021"
 
 [workspace]
 members = [
-  "rlox-common"
+  "rlox_common",
+  "rlox_parser"
 ]
 
 [dependencies]
 clap = { version = "3.2.5", features = ["derive"] }
-rlox-common = { path = "rlox-common" }
+strum = { version = "0.24", features = ["derive"] }
+rlox_common = { path = "rlox_common" }
+rlox_parser = { path = "rlox_parser" }
 
 [profile.release]
 debug = true

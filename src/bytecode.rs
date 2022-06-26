@@ -1,3 +1,5 @@
+use strum::FromRepr;
+
 use crate::value::Value;
 use rlox_common::array::Array;
 
@@ -35,46 +37,18 @@ impl Chunk {
     }
 }
 
+#[derive(FromRepr, Debug, PartialEq)]
 #[repr(u8)]
-#[derive(Debug)]
 pub(crate) enum OpCode {
-    Return = 1,
-    AddConstant = 2,
-    Negate = 3,
-    Add = 4,
-    Substract = 5,
-    Multiply = 6,
-    Divide = 7,
+    Return,
+    AddConstant,
+    Negate,
+    Add,
+    Substract,
+    Multiply,
+    Divide,
 }
 
-impl From<OpCode> for u8 {
-    fn from(value: OpCode) -> u8 {
-        match value {
-            OpCode::Return => 1,
-            OpCode::AddConstant => 2,
-            OpCode::Negate => 3,
-            OpCode::Add => 4,
-            OpCode::Substract => 5,
-            OpCode::Multiply => 6,
-            OpCode::Divide => 7,
-        }
-    }
-}
-
-impl From<u8> for OpCode {
-    fn from(byte: u8) -> Self {
-        match byte {
-            1 => OpCode::Return,
-            2 => OpCode::AddConstant,
-            3 => OpCode::Negate,
-            4 => OpCode::Add,
-            5 => OpCode::Substract,
-            6 => OpCode::Multiply,
-            7 => OpCode::Divide,
-            _ => panic!("unimplemented conversion u8 -> opcode"),
-        }
-    }
-}
 #[derive(Debug)]
 pub(crate) struct Disassembler<'d> {
     chunk: &'d Chunk,
@@ -114,10 +88,8 @@ impl<'d> Disassembler<'d> {
             output.push_str(&format!("{:0>4} ", self.chunk.lines[offset]));
         }
 
-        let opcode = match OpCode::try_from(self.chunk.code[offset]) {
-            Ok(opcode) => opcode,
-            Err(err) => panic!("{}", err),
-        };
+        let opcode: OpCode =
+            OpCode::from_repr(self.chunk.code[offset]).expect("error fetching opcode");
 
         let offset = match opcode {
             OpCode::Return => self.simple_instruction("OP_RETURN", offset, output),
