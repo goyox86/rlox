@@ -1,9 +1,6 @@
-use std::{
-    iter::Peekable,
-    str::{CharIndices, Chars, FromStr},
-};
+use std::str::Chars;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind {
     // Single-char tokens
     LeftParen,
@@ -63,7 +60,7 @@ impl TokenKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Token<'source> {
     kind: TokenKind,
     pub line: usize,
@@ -103,8 +100,8 @@ pub struct Scanner<'source> {
     line: usize,
 }
 
-impl<'scanner> Scanner<'scanner> {
-    pub fn new(source: &'scanner str) -> Self {
+impl<'source> Scanner<'source> {
+    pub fn new(source: &'source str) -> Self {
         let chars = source.chars();
 
         Self {
@@ -122,16 +119,6 @@ impl<'scanner> Scanner<'scanner> {
 
     pub fn is_at_end(&mut self) -> bool {
         self.chars.clone().peekable().peek() == None
-    }
-
-    pub fn next(&mut self) -> Option<char> {
-        match self.chars.next() {
-            Some(ch) => {
-                self.current += 1;
-                Some(ch)
-            }
-            None => None,
-        }
     }
 
     pub fn advance(&mut self) -> Option<char> {
@@ -157,25 +144,19 @@ impl<'scanner> Scanner<'scanner> {
         }
     }
 
-    // pub fn current(&mut self) -> char {
-    //     char::from_str(&self.chars.as_str()[self.current..self.current + 1]).unwrap()
-    // }
-
-    pub fn matches(&mut self, ch: char) -> bool {
+    pub fn matches(&mut self, c: char) -> bool {
         if self.is_at_end() {
             return false;
         }
 
-        if let Some(c) = self.peek() {
-            if c == ch {
+        if let Some(ch) = self.peek() {
+            if ch == c {
                 let _ = self.advance();
-                true
-            } else {
-                false
+                return true;
             }
-        } else {
-            false
         }
+
+        false
     }
 
     pub fn skip_whitespace(&mut self) {
@@ -198,22 +179,19 @@ impl<'scanner> Scanner<'scanner> {
         }
     }
 
-    pub fn comment(&mut self) -> Token {
+    pub fn comment(&mut self) -> Token<'source> {
         while let Some(c) = self.peek() {
-            if c != '\n' {
-                self.advance();
-            } else {
+            if c == '\n' {
                 break;
             }
-        }
 
-        self.line += 1;
-        self.advance();
+            self.advance();
+        }
 
         self.make_token(TokenKind::Comment)
     }
 
-    pub fn scan_token(&mut self) -> Token {
+    pub fn scan_token(&mut self) -> Token<'source> {
         self.skip_whitespace();
 
         self.start = self.current;
@@ -279,17 +257,17 @@ impl<'scanner> Scanner<'scanner> {
                 }
             }
             '"' => self.string(),
-            _ => Token::new(TokenKind::Error, self.line, self.start, None),
+            _ => unreachable!(),
         }
     }
 
-    pub fn make_token(&mut self, kind: TokenKind) -> Token {
+    pub fn make_token(&mut self, kind: TokenKind) -> Token<'source> {
         let lexeme = &self.source[self.start..self.current];
 
         Token::new(kind, self.line, self.start, Some(lexeme))
     }
 
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> Token<'source> {
         while let Some(c) = self.peek() {
             if c == '\"' {
                 break;
@@ -308,7 +286,7 @@ impl<'scanner> Scanner<'scanner> {
         self.make_token(TokenKind::String)
     }
 
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Token<'source> {
         while let Some(c) = self.peek() {
             if c.is_digit(10) {
                 self.advance();
@@ -336,7 +314,7 @@ impl<'scanner> Scanner<'scanner> {
         self.make_token(TokenKind::Number)
     }
 
-    fn identifier(&mut self) -> Token {
+    fn identifier(&mut self) -> Token<'source> {
         while let Some(c) = self.peek() {
             if self.is_alpha(c) || c.is_digit(10) {
                 self.advance();
@@ -404,6 +382,28 @@ impl<'scanner> Scanner<'scanner> {
         }
 
         TokenKind::Identifier
+    }
+
+    pub fn next(&mut self) -> Option<char> {
+        match self.chars.next() {
+            Some(ch) => {
+                self.current += 1;
+                Some(ch)
+            }
+            None => None,
+        }
+    }
+}
+
+impl<'source> Iterator for Scanner<'source> {
+    type Item = Token<'source>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let token = self.scan_token();
+        match token.kind() {
+            TokenKind::Eof => None,
+            _ => Some(token),
+        }
     }
 }
 
@@ -555,29 +555,32 @@ mod tests {
         assert_eq!(3, scanner.line());
     }
 
-    // #[test]
-    // fn skip_whitespace_with_comments_only() {
-    //     let mut scanner = Scanner::new("//this should all be ignored");
-    //
-    //     scanner.scan_token();
-    //
-    //     assert_eq!(true, scanner.is_at_end());
-    //     assert_eq!(1, scanner.line());
-    // }
+    #[test]
+    fn skip_whitespace_with_comments_only() {
+        let mut scanner = Scanner::new("//this should all be ignored");
 
-    // #[test]
-    // fn scan_token_comment_and_newlines() {
-    //     let mut scanner = Scanner::new("//this should all be ignored\n//so should this\n");
-    //
-    //     let token = scanner.scan_token();
-    //     assert_eq!("//this should all be ignored\n", token.lexeme().unwrap());
-    //     assert_eq!(false, scanner.is_at_end());
-    //     assert_eq!(1, scanner.line());
-    //     let token = scanner.scan_token();
-    //     assert_eq!("//so should this\n", token.lexeme().unwrap());
-    //     assert_eq!(true, scanner.is_at_end());
-    //     assert_eq!(2, scanner.line());
-    // }
+        scanner.scan_token();
+
+        assert_eq!(true, scanner.is_at_end());
+        assert_eq!(1, scanner.line());
+    }
+
+    #[test]
+    fn scan_token_comment_and_newlines() {
+        let mut scanner = Scanner::new("//this should all be ignored\n//so should this\n\n\n");
+
+        let token = scanner.scan_token();
+        assert_eq!("//this should all be ignored", token.lexeme().unwrap());
+        assert_eq!(false, scanner.is_at_end());
+        assert_eq!(1, scanner.line());
+        let token = scanner.scan_token();
+        assert_eq!("//so should this", token.lexeme().unwrap());
+        assert_eq!(false, scanner.is_at_end());
+        assert_eq!(2, scanner.line());
+        // still have whitespeces to consume
+        scanner.scan_token();
+        assert_eq!(true, scanner.is_at_end());
+    }
 
     #[test]
     fn skip_whitespace_works_spaces_and_valid_chars() {
@@ -981,5 +984,24 @@ mod tests {
         assert_eq!(TokenKind::Identifier, *token.kind());
         assert_eq!("variable", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
+    }
+
+    #[test]
+    fn iterator() {
+        let scanner = Scanner::new(SOURCE);
+
+        let expected_tokens = vec![
+            Token::new(TokenKind::Identifier, 1, 0, Some("print")),
+            Token::new(TokenKind::String, 1, 6, Some("\"This is a test\"")),
+            Token::new(TokenKind::Identifier, 2, 23, Some("var")),
+            Token::new(TokenKind::Identifier, 2, 27, Some("a")),
+            Token::new(TokenKind::Equal, 2, 29, Some("=")),
+            Token::new(TokenKind::Number, 2, 31, Some("1")),
+            Token::new(TokenKind::Semicolon, 2, 32, Some(";")),
+        ];
+
+        let tokens: Vec<Token> = scanner.into_iter().collect();
+
+        assert_eq!(expected_tokens, tokens);
     }
 }
