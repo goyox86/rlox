@@ -5,7 +5,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Array<T> {
     count: usize,
     capacity: usize,

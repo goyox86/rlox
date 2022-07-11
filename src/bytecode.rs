@@ -6,11 +6,11 @@ use rlox_common::array::Array;
 /// A chunk of bytecode.
 ///
 /// A heap allocated, dynamic array contiguous bytes.
-#[derive(Debug)]
-pub(crate) struct Chunk {
+#[derive(Clone, Debug)]
+pub struct Chunk {
     pub code: Array<u8>,
     pub constants: Array<Value>,
-    lines: Array<u32>,
+    lines: Array<usize>,
 }
 
 impl Chunk {
@@ -22,7 +22,7 @@ impl Chunk {
         }
     }
 
-    pub fn write(&mut self, byte: u8, line: u32) {
+    pub fn write(&mut self, byte: u8, line: usize) {
         self.code.write(byte);
         self.lines.write(line);
     }
@@ -73,6 +73,10 @@ impl<'d> Disassembler<'d> {
         }
 
         output
+    }
+
+    pub fn disassemble_chunk(chunk: &'d Chunk, name: &'d str) -> String {
+        Self::new(&chunk, name).disassemble()
     }
 
     pub fn disassemble_instruction<'output>(

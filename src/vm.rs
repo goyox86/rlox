@@ -1,10 +1,11 @@
 use std::{ptr, result};
 
+use rlox_common::array::Array;
 use rlox_parser::scanner::Scanner;
 
 use crate::{
     bytecode::{self, Chunk, OpCode},
-    compiler::Compiler,
+    compiler::{Compiler, CompilerError, CompilerOptions},
     value::Value,
 };
 
@@ -23,45 +24,59 @@ impl Default for Options {
 
 #[derive(Debug)]
 pub(crate) struct Vm {
-    chunk: Chunk,
-    source: String,
+    chunk: Option<Chunk>,
+    source: Option<String>,
     ip: *mut u8,
     options: Options,
     stack: Vec<Value>,
 }
 
 impl Vm {
-    pub fn new(chunk: Chunk, options: Option<Options>) -> Self {
+    pub fn new(options: Option<Options>) -> Self {
         let options = options.unwrap_or_default();
 
         Self {
-            chunk,
+            chunk: None,
             ip: ptr::null_mut(),
             stack: Vec::new(),
             options,
-            source: String::new(),
+            source: None,
         }
     }
 
     pub fn interpret(&mut self, source: String) -> InterpretResult {
-        self.source = source;
+        self.source = Some(source);
 
-        match self.chunk.code.get_mut(0) {
+        self.chunk = Some(self.compile()?);
+
+        let chunk = self
+            .chunk_mut()
+            .ok_or(VmError::Runtime("no bytecode chunk".into()))?;
+
+        match chunk.code.get_mut(0) {
             Some(ip) => {
                 self.ip = ip;
                 self.run()
             }
-            None => Err(Error::Runtime("empty bytecode chunk".into())),
+            None => Err(VmError::Runtime("empty bytecode chunk".into())),
         }
     }
 
-    pub fn compile(&mut self, source: String) -> Result<(), Box<Error>> {
-        self.source = source;
+    pub fn chunk(&self) -> Option<&Chunk> {
+        self.chunk.as_ref()
+    }
 
-        let compiler = Compiler::new(&self.source);
-        compiler.compile();
+    pub fn chunk_mut(&mut self) -> Option<&mut Chunk> {
+        self.chunk.as_mut()
+    }
 
-        Ok(())
+    pub fn compile(&mut self) -> Result<Chunk, VmError> {
+        let source = self.source.as_ref().unwrap();
+        let options = CompilerOptions { print_code: true };
+        let mut compiler = Compiler::new(source, options);
+        let chunk = compiler.compile().unwrap();
+
+        Ok(chunk)
     }
 
     fn run(&mut self) -> InterpretResult {
@@ -136,7 +151,8 @@ impl Vm {
     fn read_constant(&mut self) -> Value {
         let const_index_byte = self.read_byte();
         unsafe {
-            self.chunk
+            self.chunk_mut()
+                .expect("chunk expected here")
                 .constants
                 .get_unchecked(const_index_byte.into())
                 .clone()
@@ -144,11 +160,15 @@ impl Vm {
     }
 
     fn dissasemble_current_instruction(&self) {
-        let dissasembler = bytecode::Disassembler::new(&self.chunk, "chunk");
+        let dissasembler = bytecode::Disassembler::new(&self.chunk().unwrap(), "chunk");
         let mut output = String::new();
 
         let (_, disassembled_instruction) = dissasembler.disassemble_instruction(
-            unsafe { self.ip.offset_from(self.chunk.ptr()) as usize },
+            unsafe {
+                self.ip
+                    .offset_from(self.chunk().expect("chunk expected here").ptr())
+                    as usize
+            },
             &mut output,
         );
 
@@ -163,9 +183,16 @@ impl Vm {
     }
 }
 
-pub enum Error {
-    Compile(String),
+#[derive(Debug)]
+pub enum VmError {
+    Compile(CompilerError),
     Runtime(String),
 }
 
-type InterpretResult = result::Result<(), Error>;
+type InterpretResult = result::Result<(), VmError>;
+
+impl From<CompilerError> for VmError {
+    fn from(error: CompilerError) -> Self {
+        VmError::Compile(error)
+    }
+}

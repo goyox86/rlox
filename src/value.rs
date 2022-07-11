@@ -2,7 +2,7 @@ use core::fmt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Clone, Debug)]
-pub(crate) enum Value {
+pub enum Value {
     Number(f64),
 }
 

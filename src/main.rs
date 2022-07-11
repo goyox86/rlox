@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 mod bytecode;
 mod compiler;
 mod value;
@@ -10,7 +12,6 @@ use std::{
     process::exit,
 };
 
-use bytecode::Chunk;
 use vm::Vm;
 
 use clap::Parser;
@@ -42,31 +43,35 @@ fn main() -> std::io::Result<()> {
 
 fn run_file(file_path: &Path, vm_opts: Option<vm::Options>) -> std::io::Result<()> {
     let mut file = File::open(file_path)?;
-    let mut buffer = String::new();
+    let mut source = String::new();
 
-    file.read_to_string(&mut buffer)?;
+    file.read_to_string(&mut source)?;
 
-    let mut vm = Vm::new(Chunk::new(), vm_opts);
-    let _result = vm.compile(buffer);
+    let mut vm = Vm::new(vm_opts);
+    let result = vm.interpret(source);
 
-    exit(0)
-
-    // match result {
-    //     Ok(_) => exit(0),
-    //     Err(vm::Error::Compile(_)) => exit(65),
-    //     Err(vm::Error::Runtime(_)) => exit(70),
-    // }
+    match result {
+        Ok(_) => exit(0),
+        Err(vm::VmError::Compile(error)) => {
+            eprintln!("compile error: {:?}", error);
+            exit(65)
+        }
+        Err(vm::VmError::Runtime(error)) => {
+            eprintln!("runtime error: {:?}", error);
+            exit(70)
+        }
+    }
 }
 
 fn repl(vm_opts: Option<vm::Options>) -> std::io::Result<()> {
     let stdin = std::io::stdin();
-    let mut vm = Vm::new(Chunk::new(), vm_opts);
+    let mut vm = Vm::new(vm_opts);
 
     print!("> ");
     std::io::stdout().flush()?;
     for line in stdin.lock().lines() {
         print!("> ");
-        let _ = vm.compile(line?);
+        let _ = vm.interpret(line?);
     }
 
     Ok(())

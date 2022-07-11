@@ -1,6 +1,8 @@
 use std::str::Chars;
 
-#[derive(Debug, PartialEq, Eq)]
+use strum_macros::{EnumCount, EnumIter};
+
+#[derive(Clone, Copy, Debug, EnumCount, EnumIter, PartialEq, Eq)]
 pub enum TokenKind {
     // Single-char tokens
     LeftParen,
@@ -60,7 +62,7 @@ impl TokenKind {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Token<'source> {
     kind: TokenKind,
     pub line: usize,
