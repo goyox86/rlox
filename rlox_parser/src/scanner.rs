@@ -48,8 +48,14 @@ pub enum TokenKind {
     While,
 
     Comment,
-    Error,
     Eof,
+    Dummy,
+}
+
+impl Default for TokenKind {
+    fn default() -> Self {
+        TokenKind::Dummy
+    }
 }
 
 impl TokenKind {
@@ -62,9 +68,9 @@ impl TokenKind {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Token<'source> {
-    kind: TokenKind,
+    pub kind: TokenKind,
     pub line: usize,
     pub start: usize,
     lexeme: Option<&'source str>,
@@ -77,6 +83,13 @@ impl<'source> Token<'source> {
             line,
             start,
             lexeme,
+        }
+    }
+
+    pub fn dummy() -> Self {
+        Self {
+            kind: TokenKind::Dummy,
+            ..Default::default()
         }
     }
 
