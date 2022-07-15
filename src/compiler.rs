@@ -8,12 +8,12 @@ use crate::{
     value::Value,
 };
 
-type ParseFn<'a> = fn(&'a Compiler<'a>) -> Result<(), CompilerError>;
+type ParseFn = fn(&mut CompilerCtx) -> Result<(), CompilerError>;
 
-#[derive(Copy, Clone, Debug, Default)]
-pub struct ParseRule<'rule>(Option<ParseFn<'rule>>, Option<ParseFn<'rule>>, Precedence);
+#[derive(Copy, Clone, Default)]
+pub struct ParseRule(Option<ParseFn>, Option<ParseFn>, Precedence);
 
-impl<'rule> ParseRule<'rule> {
+impl ParseRule {
     fn precedence(&self) -> &Precedence {
         &self.2
     }
@@ -60,190 +60,199 @@ pub struct CompilerOptions {
 }
 
 pub struct Compiler<'source> {
-    source: &'source str,
-    chunk: RefCell<Chunk>,
-    parser: Parser<'source>,
-    parse_rules: Vec<ParseRule<'source>>,
     options: CompilerOptions,
+    parser: Parser<'source>,
+    source: &'source str,
+}
+
+struct CompilerCtx<'source> {
+    chunk: Chunk,
+    parser: Parser<'source>,
+    options: &'source CompilerOptions,
+}
+
+impl<'source> CompilerCtx<'source> {
+    pub fn new(source: &'source str, options: &'source CompilerOptions) -> Self {
+        Self {
+            chunk: Chunk::new(),
+            parser: Parser::new(source),
+            options,
+        }
+    }
 }
 
 impl<'source> Compiler<'source> {
     pub fn new(source: &'source str, options: CompilerOptions) -> Self {
-        let mut rules: [ParseRule; TokenKind::COUNT] =
-            [ParseRule(None, None, Precedence::None); TokenKind::COUNT];
-        rules[TokenKind::LeftParen as usize] =
-            ParseRule(Some(Compiler::grouping), None, Precedence::None);
-        rules[TokenKind::Minus as usize] = ParseRule(
-            Some(Compiler::unary),
-            Some(Compiler::binary),
-            Precedence::Term,
-        );
-        rules[TokenKind::Plus as usize] = ParseRule(None, Some(Compiler::binary), Precedence::Term);
-        rules[TokenKind::Slash as usize] =
-            ParseRule(None, Some(Compiler::binary), Precedence::Factor);
-        rules[TokenKind::Star as usize] =
-            ParseRule(None, Some(Compiler::binary), Precedence::Factor);
-        rules[TokenKind::Number as usize] =
-            ParseRule(Some(Compiler::number), None, Precedence::None);
-        rules;
-
         Self {
-            source,
-            chunk: RefCell::new(Chunk::new()),
-            parser: Parser::new(source),
-            parse_rules: Vec::from(rules),
             options,
+            parser: Parser::new(source),
+            source,
         }
     }
 
-    pub(crate) fn compile(&'source self) -> Result<Chunk, CompilerError> {
-        self.parser.advance();
+    pub fn compile(&self, source: &'source str) -> Result<Chunk, CompilerError> {
+        let mut ctx = CompilerCtx::new(source, &self.options);
 
-        self.expression()?;
-        self.consume(TokenKind::Eof, "Expect end of expression.")?;
-        self.end();
+        ctx.parser.advance();
 
-        Ok(self.chunk.borrow().clone())
-    }
+        expression(&mut ctx)?;
+        consume(&mut ctx, TokenKind::Eof, "Expect end of expression.")?;
+        end(&mut ctx);
 
-    fn expression(&'source self) -> Result<(), CompilerError> {
-        self.parse_precedence(Precedence::Assignment);
-
-        Ok(())
-    }
-
-    fn grouping(&'source self) -> Result<(), CompilerError> {
-        self.expression()?;
-
-        Ok(self.consume(TokenKind::RightParen, "Expect ')' after expression")?)
-    }
-
-    fn binary(&'source self) -> Result<(), CompilerError> {
-        let previous_token = self.parser.previous().expect("expected token here");
-        let rule = self.get_parse_rule(previous_token.kind());
-
-        self.parse_precedence(rule.precedence().higher());
-
-        match previous_token.kind() {
-            TokenKind::Plus => Ok(self.emit_byte(OpCode::Add as u8)?),
-            TokenKind::Minus => Ok(self.emit_byte(OpCode::Substract as u8)?),
-            TokenKind::Star => Ok(self.emit_byte(OpCode::Multiply as u8)?),
-            TokenKind::Slash => Ok(self.emit_byte(OpCode::Divide as u8)?),
-            _ => return Ok(()),
-        }
-    }
-
-    fn unary(&'source self) -> Result<(), CompilerError> {
-        let previous_token = &self.parser.previous();
-
-        let token_kind = previous_token.unwrap();
-
-        self.expression();
-
-        self.parse_precedence(Precedence::Unary);
-
-        if let TokenKind::Minus = *token_kind.kind() {
-            return Ok(self.emit_byte(OpCode::Negate as u8)?);
-        }
-
-        Ok(())
-    }
-
-    fn number(&self) -> Result<(), CompilerError> {
-        let previous_token = self.parser.previous().unwrap();
-        let number: f64 = f64::from_str(previous_token.lexeme().unwrap()).unwrap();
-        let value = Value::Number(number);
-
-        Ok(self.emit_constant(value))
-    }
-
-    fn consume(&self, token_kind: TokenKind, error_msg: &str) -> Result<(), CompilerError> {
-        if *self.parser.current().expect("token expected here").kind() == token_kind {
-            self.parser.advance();
-            return Ok(());
-        }
-
-        Err(CompilerError(error_msg.to_string()))
-    }
-
-    fn end(&self) {
-        self.emit_return();
-
-        if self.options.print_code && !self.parser.had_error {
-            bytecode::Disassembler::disassemble_chunk(&self.chunk.borrow(), "code");
-        }
-    }
-
-    pub fn parse_precedence(&'source self, precedence: Precedence) -> Result<(), CompilerError> {
-        self.parser.advance();
-
-        let parse_rule = self.get_parse_rule(self.parser.previous().unwrap().kind());
-
-        if parse_rule.0.is_none() {
-            return Err(CompilerError("Expect expression.".into()));
-        }
-
-        parse_rule.0.unwrap()(self)?;
-
-        let current_token = self.parser.current().expect("expected token here");
-        let parse_rule = self.get_parse_rule(self.parser.current().unwrap().kind());
-        while (precedence <= *parse_rule.precedence()) {
-            self.parser.advance();
-            let parse_rule = self.get_parse_rule(self.parser.previous().unwrap().kind());
-            if parse_rule.1.is_some() {
-                parse_rule.1.unwrap()(self)?;
-            } else {
-                return Ok(());
-            }
-        }
-
-        Ok(())
-    }
-
-    fn emit_return(&self) -> Result<(), CompilerError> {
-        self.emit_byte(OpCode::Return as u8)
-    }
-
-    fn emit_constant(&self, value: Value) {
-        let constant_idx = self.make_constant(value);
-        self.emit_bytes(OpCode::AddConstant as u8, constant_idx)
-    }
-
-    fn emit_byte(&self, byte: u8) -> Result<(), CompilerError> {
-        let line = self
-            .parser
-            .previous()
-            .expect("expected to have a token here")
-            .line;
-
-        Ok(self.chunk.borrow_mut().write(byte, line))
-    }
-
-    fn emit_bytes(&self, byte1: u8, byte2: u8) {
-        self.emit_byte(byte1);
-        self.emit_byte(byte2);
-    }
-
-    fn make_constant(&self, value: Value) -> u8 {
-        let constant_idx = self.chunk.borrow_mut().add_constant(value) as u8;
-        constant_idx
-    }
-
-    fn get_parse_rule(&self, token_kind: &TokenKind) -> ParseRule<'source> {
-        self.parse_rules[*token_kind as usize]
+        Ok(ctx.chunk)
     }
 }
 
-#[derive(Debug)]
-pub struct CompilerError(String);
+fn expression(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    Ok(parse_precedence(ctx, Precedence::Assignment)?)
+}
+
+fn grouping(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    expression(ctx)?;
+
+    Ok(consume(
+        ctx,
+        TokenKind::RightParen,
+        "Expect ')' after expression",
+    )?)
+}
+
+fn binary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    let previous_token = ctx.parser.previous().expect("expected token here");
+    let rule = ctx.parser.get_parse_rule(previous_token.kind());
+
+    parse_precedence(ctx, rule.precedence().higher())?;
+
+    match previous_token.kind() {
+        TokenKind::Plus => Ok(emit_byte(ctx, OpCode::Add as u8)?),
+        TokenKind::Minus => Ok(emit_byte(ctx, OpCode::Substract as u8)?),
+        TokenKind::Star => Ok(emit_byte(ctx, OpCode::Multiply as u8)?),
+        TokenKind::Slash => Ok(emit_byte(ctx, OpCode::Divide as u8)?),
+        _ => return Ok(()),
+    }
+}
+
+fn unary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    let previous_token = ctx.parser.previous();
+    let token_kind = previous_token.unwrap();
+
+    parse_precedence(ctx, Precedence::Unary)?;
+
+    if let TokenKind::Minus = *token_kind.kind() {
+        return Ok(emit_byte(ctx, OpCode::Negate as u8)?);
+    }
+
+    Ok(())
+}
+
+fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    let previous_token = ctx.parser.previous().unwrap();
+    let number: f64 = f64::from_str(previous_token.lexeme().unwrap()).unwrap();
+    let value = Value::Number(number);
+
+    Ok(emit_constant(ctx, value))
+}
+
+fn consume(
+    ctx: &mut CompilerCtx,
+    token_kind: TokenKind,
+    error_msg: &str,
+) -> Result<(), CompilerError> {
+    if *ctx.parser.current().expect("token expected here").kind() == token_kind {
+        ctx.parser.advance();
+        return Ok(());
+    }
+
+    Err(CompilerError {
+        msg: error_msg.into(),
+        line: ctx.parser.current().unwrap().line,
+    })
+}
+
+fn end(ctx: &mut CompilerCtx) {
+    emit_return(ctx);
+
+    if ctx.options.print_code && !ctx.parser.had_error {
+        bytecode::Disassembler::disassemble_chunk(&ctx.chunk, "code");
+    }
+}
+
+fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(), CompilerError> {
+    ctx.parser.advance();
+
+    let mut prefix_rule = ctx
+        .parser
+        .get_parse_rule(ctx.parser.previous().unwrap().kind());
+
+    let mut result = if let Some(prefix_rule) = prefix_rule.0 {
+        prefix_rule(ctx)
+    } else {
+        Err(CompilerError {
+            msg: "Expect expression.".into(),
+            line: ctx.parser.current().unwrap().line,
+        })
+    };
+
+    while (precedence
+        <= *ctx
+            .parser
+            .get_parse_rule(ctx.parser.current().unwrap().kind())
+            .precedence())
+    {
+        ctx.parser.advance();
+        let infix_rule = ctx
+            .parser
+            .get_parse_rule(ctx.parser.previous().unwrap().kind());
+
+        if let Some(infix_rule) = infix_rule.1 {
+            result = infix_rule(ctx);
+        }
+    }
+
+    result
+}
+
+fn emit_return(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    emit_byte(ctx, OpCode::Return as u8)
+}
+
+fn emit_constant(ctx: &mut CompilerCtx, value: Value) {
+    let constant_idx = make_constant(ctx, value);
+    emit_bytes(ctx, OpCode::AddConstant as u8, constant_idx)
+}
+
+fn emit_byte(ctx: &mut CompilerCtx, byte: u8) -> Result<(), CompilerError> {
+    let line = ctx
+        .parser
+        .previous()
+        .expect("expected to have a token here")
+        .line;
+
+    Ok(ctx.chunk.write(byte, line))
+}
+
+fn emit_bytes(ctx: &mut CompilerCtx, byte1: u8, byte2: u8) {
+    emit_byte(ctx, byte1);
+    emit_byte(ctx, byte2);
+}
+
+fn make_constant(ctx: &mut CompilerCtx, value: Value) -> u8 {
+    let constant_idx = ctx.chunk.add_constant(value) as u8;
+    constant_idx
+}
 
 #[derive(Debug)]
+pub struct CompilerError {
+    msg: String,
+    line: usize,
+}
+
 struct Parser<'source> {
-    current: RefCell<Option<Token<'source>>>,
-    previous: RefCell<Option<Token<'source>>>,
-    scanner: RefCell<Scanner<'source>>,
+    current: Option<Token<'source>>,
+    parse_rules: Vec<ParseRule>,
+    previous: Option<Token<'source>>,
+    scanner: Scanner<'source>,
     source: &'source str,
-    parse_rules: Vec<ParseRule<'source>>,
     had_error: bool,
     panic_mode: bool,
 }
@@ -252,38 +261,30 @@ impl<'source> Parser<'source> {
     fn new(source: &'source str) -> Self {
         let mut rules: [ParseRule; TokenKind::COUNT] =
             [ParseRule(None, None, Precedence::None); TokenKind::COUNT];
-        rules[TokenKind::LeftParen as usize] =
-            ParseRule(Some(Compiler::grouping), None, Precedence::None);
-        rules[TokenKind::Minus as usize] = ParseRule(
-            Some(Compiler::unary),
-            Some(Compiler::binary),
-            Precedence::Term,
-        );
-        rules[TokenKind::Plus as usize] = ParseRule(None, Some(Compiler::binary), Precedence::Term);
-        rules[TokenKind::Slash as usize] =
-            ParseRule(None, Some(Compiler::binary), Precedence::Factor);
-        rules[TokenKind::Star as usize] =
-            ParseRule(None, Some(Compiler::binary), Precedence::Factor);
-        rules[TokenKind::Number as usize] =
-            ParseRule(Some(Compiler::number), None, Precedence::None);
+        rules[TokenKind::LeftParen as usize] = ParseRule(Some(grouping), None, Precedence::None);
+        rules[TokenKind::Minus as usize] = ParseRule(Some(unary), Some(binary), Precedence::Term);
+        rules[TokenKind::Plus as usize] = ParseRule(None, Some(binary), Precedence::Term);
+        rules[TokenKind::Slash as usize] = ParseRule(None, Some(binary), Precedence::Factor);
+        rules[TokenKind::Star as usize] = ParseRule(None, Some(binary), Precedence::Factor);
+        rules[TokenKind::Number as usize] = ParseRule(Some(number), None, Precedence::None);
         rules;
 
         Self {
-            current: RefCell::new(None),
-            previous: RefCell::new(None),
+            current: None,
+            previous: None,
             source,
-            scanner: RefCell::new(Scanner::new(source)),
+            scanner: Scanner::new(source),
             had_error: false,
             panic_mode: false,
             parse_rules: rules.to_vec(),
         }
     }
 
-    fn advance(&self) {
-        self.previous.swap(&self.current);
+    fn advance(&mut self) {
+        self.previous = self.current;
 
-        let mut current_token = self.scanner.borrow_mut().scan_token();
-        *self.current.borrow_mut() = Some(current_token);
+        let mut current_token = self.scanner.scan_token();
+        self.current = Some(current_token);
     }
 
     // fn error_at_current(&mut self, msg: &str) {
@@ -311,15 +312,15 @@ impl<'source> Parser<'source> {
     //     eprintln!(": {}", msg);
     // }
 
-    fn get_parse_rule(&self, token_kind: &TokenKind) -> ParseRule<'source> {
+    fn get_parse_rule(&self, token_kind: &TokenKind) -> ParseRule {
         self.parse_rules[*token_kind as usize]
     }
 
     pub fn current(&self) -> Option<Token<'source>> {
-        self.current.borrow().to_owned()
+        self.current
     }
 
     pub fn previous(&self) -> Option<Token<'source>> {
-        self.previous.borrow().to_owned()
+        self.previous
     }
 }

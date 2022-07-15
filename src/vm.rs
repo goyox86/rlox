@@ -74,7 +74,7 @@ impl Vm {
         let source = self.source.as_ref().unwrap();
         let options = CompilerOptions { print_code: true };
         let mut compiler = Compiler::new(source, options);
-        let chunk = compiler.compile().unwrap();
+        let chunk = compiler.compile(source)?;
 
         Ok(chunk)
     }
