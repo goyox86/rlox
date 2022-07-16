@@ -167,7 +167,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rlox_common",
- "rlox_parser",
+ "rlox_compiler",
  "strum",
 ]
 
@@ -179,9 +179,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlox_parser"
+name = "rlox_compiler"
 version = "0.1.0"
 dependencies = [
+ "rlox_common",
  "strum",
  "strum_macros",
 ]

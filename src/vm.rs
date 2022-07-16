@@ -1,23 +1,23 @@
 use std::{ptr, result};
 
-use rlox_common::array::Array;
-use rlox_parser::scanner::Scanner;
-
-use crate::{
-    bytecode::{self, Chunk, OpCode},
+use rlox_common::{array::Array, value::Value};
+use rlox_compiler::{
+    bytecode::{Chunk, OpCode},
     compiler::{Compiler, CompilerError, CompilerOptions},
-    value::Value,
+    scanner::Scanner,
 };
 
 #[derive(Debug)]
 pub(crate) struct Options {
     pub trace_execution: bool,
+    pub compiler: CompilerOptions,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             trace_execution: false,
+            compiler: Default::default(),
         }
     }
 }
@@ -72,8 +72,7 @@ impl Vm {
 
     pub fn compile(&mut self) -> Result<Chunk, VmError> {
         let source = self.source.as_ref().unwrap();
-        let options = CompilerOptions { print_code: true };
-        let mut compiler = Compiler::new(source, options);
+        let mut compiler = Compiler::new(&self.options.compiler);
         let chunk = compiler.compile(source)?;
 
         Ok(chunk)
@@ -160,7 +159,8 @@ impl Vm {
     }
 
     fn dissasemble_current_instruction(&self) {
-        let dissasembler = bytecode::Disassembler::new(&self.chunk().unwrap(), "chunk");
+        let dissasembler =
+            rlox_compiler::bytecode::Disassembler::new(&self.chunk().unwrap(), "chunk");
         let mut output = String::new();
 
         let (_, disassembled_instruction) = dissasembler.disassemble_instruction(

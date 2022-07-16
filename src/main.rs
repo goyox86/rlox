@@ -1,8 +1,5 @@
 #![allow(unused)]
 
-mod bytecode;
-mod compiler;
-mod value;
 mod vm;
 
 use std::{
@@ -12,6 +9,7 @@ use std::{
     process::exit,
 };
 
+use rlox_compiler::compiler::CompilerOptions;
 use vm::Vm;
 
 use clap::Parser;
@@ -21,6 +19,8 @@ use clap::Parser;
 struct Args {
     #[clap(short, long, value_parser)]
     trace_execution: bool,
+    #[clap(short, long, value_parser)]
+    print_code: bool,
 
     // Loc source code file path
     file_path: Option<PathBuf>,
@@ -30,10 +30,13 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse();
     let vm_opts = vm::Options {
         trace_execution: args.trace_execution,
+        compiler: CompilerOptions {
+            print_code: args.print_code,
+        },
     };
 
     if let Some(ref file_path) = args.file_path {
-        run_file(file_path, None)?;
+        run_file(file_path, Some(vm_opts))?;
     } else {
         repl(None)?;
     }
@@ -76,38 +79,3 @@ fn repl(vm_opts: Option<vm::Options>) -> std::io::Result<()> {
 
     Ok(())
 }
-
-// fn main() {
-//     let mut chunk = Chunk::new();
-//
-//     let mut constant = chunk.add_constant(Value::Number(1.2));
-//     chunk.write(OpCode::AddConstant as u8, 123);
-//     chunk.write(constant as u8, 123);
-//
-//     constant = chunk.add_constant(Value::Number(3.4));
-//     chunk.write(OpCode::AddConstant as u8, 123);
-//     chunk.write(constant as u8, 123);
-//
-//     chunk.write(OpCode::Add as u8, 123);
-//
-//     constant = chunk.add_constant(Value::Number(5.6));
-//     chunk.write(OpCode::AddConstant as u8, 123);
-//     chunk.write(constant as u8, 123);
-//
-//     chunk.write(OpCode::Divide as u8, 123);
-//
-//     for _ in 0..1_000_000 {
-//         chunk.write(OpCode::Negate as u8, 123);
-//     }
-//
-//     // chunk.write(OpCode::Negate as u8, 123);
-//     chunk.write(OpCode::Return as u8, 123);
-//
-//     let cli_args = Args::parse();
-//     let vm_opts = vm::Options {
-//         trace_execution: cli_args.trace_execution,
-//     };
-//
-//     let mut vm = Vm::new(chunk, Some(vm_opts));
-//     let _ = vm.interpret();
-// }
