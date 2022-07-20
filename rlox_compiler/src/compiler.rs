@@ -302,7 +302,10 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
     let mut result = if let Some(prefix_fn) = parse_rule.prefix() {
         prefix_fn(ctx)
     } else {
-        Ok(())
+        Err(CompilerError {
+            msg: "Expect expression.".into(),
+            line: ctx.current.line,
+        })
     };
 
     while precedence <= get_parse_rule(ctx.current.kind).precedence() {
