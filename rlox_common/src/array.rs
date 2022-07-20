@@ -15,10 +15,12 @@ pub struct Array<T> {
 
 impl<T> Array<T> {
     pub fn new() -> Self {
+        let ptr = NonNull::dangling();
+
         Self {
             count: 0,
             capacity: 0,
-            ptr: NonNull::dangling(),
+            ptr,
             _marker: PhantomData,
         }
     }
@@ -67,7 +69,7 @@ impl<T> Array<T> {
     #[inline]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.len() {
-            unsafe { Some(&*self.ptr().add(index)) }
+            unsafe { Some(&*self.ptr.as_ptr().add(index)) }
         } else {
             None
         }
@@ -75,20 +77,25 @@ impl<T> Array<T> {
 
     #[inline]
     pub unsafe fn get_unchecked(&self, index: usize) -> &T {
-        &*self.ptr().add(index)
+        &*self.as_ptr().add(index)
     }
 
     #[inline]
     pub fn get_mut<'a>(&mut self, index: usize) -> Option<&'a mut T> {
         if index < self.len() {
-            unsafe { Some(&mut *self.ptr().add(index)) }
+            unsafe { Some(&mut *self.as_ptr().add(index)) }
         } else {
             None
         }
     }
 
     #[inline]
-    pub fn ptr(&self) -> *mut T {
+    pub fn as_ptr(&self) -> *mut T {
+        self.ptr.as_ptr()
+    }
+
+    #[inline]
+    pub fn as_mut_ptr(&self) -> *mut T {
         self.ptr.as_ptr()
     }
 
@@ -138,6 +145,7 @@ impl<T> Array<T> {
                 self.ptr.as_ptr().cast(),
                 old_capacity,
             );
+
             if old_capacity > 0 {
                 dealloc(old_ptr.as_ptr().cast(), old_layout);
             }

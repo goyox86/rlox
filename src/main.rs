@@ -28,7 +28,7 @@ struct Args {
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let vm_opts = vm::Options {
+    let vm_opts = vm::VmOptions {
         trace_execution: args.trace_execution,
         compiler: CompilerOptions {
             print_code: args.print_code,
@@ -44,7 +44,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn run_file(file_path: &Path, vm_opts: Option<vm::Options>) -> std::io::Result<()> {
+fn run_file(file_path: &Path, vm_opts: Option<vm::VmOptions>) -> std::io::Result<()> {
     let mut file = File::open(file_path)?;
     let mut source = String::new();
 
@@ -59,14 +59,14 @@ fn run_file(file_path: &Path, vm_opts: Option<vm::Options>) -> std::io::Result<(
             eprintln!("compile error: {:?}", error);
             exit(65)
         }
-        Err(vm::VmError::Runtime(error)) => {
+        error @ Err(vm::VmError::Runtime(_, _)) => {
             eprintln!("runtime error: {:?}", error);
             exit(70)
         }
     }
 }
 
-fn repl(vm_opts: Option<vm::Options>) -> std::io::Result<()> {
+fn repl(vm_opts: Option<vm::VmOptions>) -> std::io::Result<()> {
     let stdin = std::io::stdin();
     let mut vm = Vm::new(vm_opts);
 
