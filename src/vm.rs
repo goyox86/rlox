@@ -213,24 +213,24 @@ fn run(vm: &mut Vm) -> InterpretResult {
             OpCode::AddFalse => vm.push(Value::Boolean(false)),
             OpCode::Not => {
                 let value = vm.pop();
-                vm.push(Value::Boolean(value.is_falsey()))
+                vm.push(Value::from(value.is_falsey()))
             }
             OpCode::Equal => {
                 let right = vm.pop();
                 let left = vm.pop();
-                vm.push(Value::Boolean(left == right))
+                vm.push(Value::from(left == right))
             }
             OpCode::Greater => {
                 vm.check_both_number()?;
                 let right = vm.pop();
                 let left = vm.pop();
-                vm.push(Value::Boolean(left > right));
+                vm.push(Value::from(left > right));
             }
             OpCode::Less => {
                 vm.check_both_number()?;
                 let right = vm.pop();
                 let left = vm.pop();
-                vm.push(Value::Boolean(left < right));
+                vm.push(Value::from(left < right));
             }
         }
     }

@@ -73,8 +73,9 @@ fn repl(vm_opts: Option<vm::VmOptions>) -> std::io::Result<()> {
     print!("> ");
     std::io::stdout().flush()?;
     for line in stdin.lock().lines() {
+        vm.interpret(line?).unwrap();
         print!("> ");
-        let _ = vm.interpret(line?);
+        std::io::stdout().flush()?;
     }
 
     Ok(())

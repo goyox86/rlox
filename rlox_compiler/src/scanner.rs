@@ -2,7 +2,7 @@ use std::str::Chars;
 
 use strum_macros::{EnumCount, EnumIter};
 
-#[derive(Clone, Copy, Debug, EnumCount, EnumIter, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, EnumCount, EnumIter, Hash, PartialEq, Eq)]
 pub enum TokenKind {
     // Single-char tokens
     LeftParen,
@@ -392,7 +392,9 @@ impl<'source> Scanner<'source> {
         rest: &str,
         token_kind: TokenKind,
     ) -> TokenKind {
-        if self.current - self.start == start + len && &self.source[start..] == rest {
+        if self.current - self.start == start + len
+            && &self.source[(self.start + start)..self.current] == rest
+        {
             return token_kind;
         }
 
@@ -1006,9 +1008,9 @@ mod tests {
         let scanner = Scanner::new(SOURCE);
 
         let expected_tokens = vec![
-            Token::new(TokenKind::Identifier, 1, 0, Some("print")),
+            Token::new(TokenKind::Print, 1, 0, Some("print")),
             Token::new(TokenKind::String, 1, 6, Some("\"This is a test\"")),
-            Token::new(TokenKind::Identifier, 2, 23, Some("var")),
+            Token::new(TokenKind::Var, 2, 23, Some("var")),
             Token::new(TokenKind::Identifier, 2, 27, Some("a")),
             Token::new(TokenKind::Equal, 2, 29, Some("=")),
             Token::new(TokenKind::Number, 2, 31, Some("1")),
