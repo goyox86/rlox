@@ -72,7 +72,7 @@ pub struct CompilerOptions {
 }
 
 pub struct Compiler<'c> {
-    options: &'c CompilerOptions,
+    options: Option<&'c CompilerOptions>,
 }
 
 type ParseRules = HashMap<TokenKind, ParseRule>;
@@ -85,11 +85,11 @@ struct CompilerCtx<'source> {
     parse_rules: ParseRules,
     had_error: bool,
     panic_mode: bool,
-    options: &'source CompilerOptions,
+    options: Option<&'source CompilerOptions>,
 }
 
 impl<'source> CompilerCtx<'source> {
-    pub fn new(source: &'source str, options: &'source CompilerOptions) -> Self {
+    pub fn new(source: &'source str, options: Option<&'source CompilerOptions>) -> Self {
         Self {
             chunk: Chunk::new(),
             options,
@@ -214,16 +214,16 @@ impl<'source> CompilerCtx<'source> {
 }
 
 impl<'c> Compiler<'c> {
-    pub fn new(options: &'c CompilerOptions) -> Self {
+    pub fn new(options: Option<&'c CompilerOptions>) -> Self {
         Self { options }
     }
 
     pub fn compile(&self, source: &str) -> Result<Chunk, CompilerError> {
-        let mut ctx = CompilerCtx::new(source, &self.options);
+        let mut ctx = CompilerCtx::new(source, self.options);
 
         advance(&mut ctx);
         expression(&mut ctx)?;
-        consume(&mut ctx, TokenKind::Eof, "Expect end of expression.")?;
+        consume(&mut ctx, TokenKind::Eof, "expect end of expression.")?;
         end(&mut ctx);
 
         Ok(ctx.chunk)
@@ -240,7 +240,7 @@ fn grouping(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(consume(
         ctx,
         TokenKind::RightParen,
-        "Expect ')' after expression",
+        "expect ')' after expression.",
     )?)
 }
 
@@ -320,9 +320,11 @@ fn consume(
 fn end(ctx: &mut CompilerCtx) {
     let _ = emit_return(ctx);
 
-    if ctx.options.print_code && !ctx.had_error {
-        let bytecode = Disassembler::disassemble_chunk(&ctx.chunk, "code");
-        println!("{}", bytecode);
+    if let Some(options) = ctx.options {
+        if options.print_code && !ctx.had_error {
+            let bytecode = Disassembler::disassemble_chunk(&ctx.chunk, "code");
+            println!("{}", bytecode);
+        }
     }
 }
 
@@ -334,7 +336,7 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
         prefix_fn(ctx)
     } else {
         Err(CompilerError {
-            msg: "Expect expression.".into(),
+            msg: "expect expression.".into(),
             line: ctx.current.line,
         })
     };
@@ -381,8 +383,79 @@ fn get_parse_rule(ctx: &mut CompilerCtx, token_kind: TokenKind) -> ParseRule {
     *ctx.parse_rules.get(&token_kind).unwrap()
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CompilerError {
     msg: String,
     line: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unary_negation_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect expression.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("-"));
+    }
+
+    #[test]
+    fn substraction_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect expression.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("2 -"));
+    }
+
+    #[test]
+    fn addition_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect expression.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("2 +"));
+    }
+
+    #[test]
+    fn multiplication_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect expression.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("2 *"));
+    }
+
+    #[test]
+    fn division_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect expression.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("2 /"));
+    }
+
+    #[test]
+    fn grouping_unclosed_paren_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect ')' after expression.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("(2 + 2"));
+    }
 }

@@ -56,7 +56,7 @@ impl Vm {
 
     pub fn compile(&mut self) -> Result<Chunk, VmError> {
         let source = self.source.as_ref().unwrap();
-        let mut compiler = Compiler::new(&self.options.compiler);
+        let mut compiler = Compiler::new(Some(&self.options.compiler));
         let chunk = compiler.compile(source)?;
 
         Ok(chunk)

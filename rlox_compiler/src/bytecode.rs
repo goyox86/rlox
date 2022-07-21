@@ -6,7 +6,7 @@ use rlox_common::value::Value;
 /// A chunk of bytecode.
 ///
 /// A heap allocated, dynamic array contiguous bytes.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Chunk {
     pub code: Array<u8>,
     pub constants: Array<Value>,
