@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use rustc_hash::FxHashMap;
 use strum::{EnumCount, FromRepr};
 
 use crate::{
@@ -28,6 +29,8 @@ impl ParseRule {
         self.2
     }
 }
+
+type ParseRules = FxHashMap<TokenKind, ParseRule>;
 
 // From lowest to higest precedence
 #[derive(Copy, FromRepr, Clone, Debug, Default, PartialEq, PartialOrd)]
@@ -75,8 +78,6 @@ pub struct Compiler<'c> {
     options: Option<&'c CompilerOptions>,
 }
 
-type ParseRules = HashMap<TokenKind, ParseRule>;
-
 struct CompilerCtx<'source> {
     chunk: Chunk,
     previous: Token<'source>,
@@ -103,7 +104,7 @@ impl<'source> CompilerCtx<'source> {
     }
 
     fn create_parse_rules() -> ParseRules {
-        let mut rules = HashMap::with_capacity(TokenKind::COUNT);
+        let mut rules = FxHashMap::default();
         rules.insert(
             TokenKind::LeftParen,
             ParseRule(Some(grouping), None, Precedence::None),
@@ -296,6 +297,7 @@ fn literal(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     }
 }
 
+#[inline(always)]
 fn advance(ctx: &mut CompilerCtx) {
     ctx.previous = ctx.current;
     ctx.current = ctx.scanner.scan_token();
@@ -352,26 +354,31 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
     result
 }
 
+#[inline(always)]
 fn emit_return(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     emit_byte(ctx, OpCode::Return as u8)
 }
 
+#[inline(always)]
 fn emit_constant(ctx: &mut CompilerCtx, value: Value) {
     let constant_idx = make_constant(ctx, value);
     emit_bytes(ctx, OpCode::AddConstant as u8, constant_idx)
 }
 
+#[inline(always)]
 fn emit_byte(ctx: &mut CompilerCtx, byte: u8) -> Result<(), CompilerError> {
     let line = ctx.previous.line;
 
     Ok(ctx.chunk.write(byte, line))
 }
 
+#[inline(always)]
 fn emit_bytes(ctx: &mut CompilerCtx, byte1: u8, byte2: u8) {
     let _ = emit_byte(ctx, byte1);
     let _ = emit_byte(ctx, byte2);
 }
 
+#[inline(always)]
 fn make_constant(ctx: &mut CompilerCtx, value: Value) -> u8 {
     let constant_idx = ctx.chunk.add_constant(value) as u8;
     constant_idx
