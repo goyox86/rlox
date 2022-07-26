@@ -2,11 +2,9 @@ use std::fmt::Debug;
 use std::fmt::Display;
 
 #[derive(Debug)]
-pub struct Stack<T>(Vec<T>)
-where
-    T: Debug;
+pub struct Stack<T>(Vec<T>);
 
-impl<T: Debug> Stack<T> {
+impl<T> Stack<T> {
     pub fn new() -> Self {
         Self(Vec::new())
     }

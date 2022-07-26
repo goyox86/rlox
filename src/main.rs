@@ -1,5 +1,9 @@
 #![allow(unused)]
 
+mod bytecode;
+mod compiler;
+mod scanner;
+mod value;
 mod vm;
 
 use std::{
@@ -9,10 +13,10 @@ use std::{
     process::exit,
 };
 
-use rlox_compiler::compiler::CompilerOptions;
-use vm::Vm;
-
 use clap::Parser;
+
+use crate::compiler::CompilerOptions;
+use vm::Vm;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]

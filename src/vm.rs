@@ -1,11 +1,10 @@
 use std::{fmt::Display, ptr, result};
 
-use rlox_common::{array::Array, stack::Stack, value::Value};
-use rlox_compiler::{
-    bytecode::{Chunk, OpCode},
-    compiler::{Compiler, CompilerError, CompilerOptions},
-    scanner::Scanner,
-};
+use rlox_common::{Array, Stack};
+
+use crate::bytecode::{Chunk, Disassembler, OpCode};
+use crate::compiler::{Compiler, CompilerError, CompilerOptions};
+use crate::value::Value;
 
 #[derive(Debug)]
 pub(crate) struct VmOptions {
@@ -112,8 +111,7 @@ impl Vm {
     }
 
     fn dissasemble_current_instruction(&mut self) {
-        let dissasembler =
-            rlox_compiler::bytecode::Disassembler::new(self.chunk.as_ref().unwrap(), "chunk");
+        let dissasembler = Disassembler::new(self.chunk.as_ref().unwrap(), "chunk");
         let mut output = String::new();
 
         let (_, disassembled_instruction) =
@@ -185,10 +183,17 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 vm.push(negated);
             }
             OpCode::Add => {
-                vm.check_both_number()?;
-                let right = vm.pop();
-                let left = vm.pop();
-                vm.push(left + right);
+                if let (Some(left), Some(right)) = (vm.stack.peek(1), vm.stack.peek(0)) {
+                    if (left.is_number() && right.is_number())
+                        || (left.is_string() && right.is_string())
+                    {
+                        let right = vm.pop();
+                        let left = vm.pop();
+                        vm.push(left + right);
+                    } else {
+                        return vm.runtime_error("operands must be two numbers of two strings.");
+                    }
+                }
             }
             OpCode::Substract => {
                 vm.check_both_number()?;
@@ -254,4 +259,11 @@ impl From<CompilerError> for VmError {
     fn from(error: CompilerError) -> Self {
         VmError::Compile(error)
     }
+}
+
+enum OperandsCheck {
+    Pass,
+    LeftWrongType,
+    RightWrongType,
+    Missing,
 }

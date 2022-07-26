@@ -1,13 +1,13 @@
 use strum::FromRepr;
 
-use rlox_common::array::Array;
-use rlox_common::value::Value;
+use crate::value::Value;
+use rlox_common::Array;
 
 /// A chunk of bytecode.
 ///
 /// A heap allocated, dynamic array contiguous bytes.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Chunk {
+pub(crate) struct Chunk {
     pub code: Array<u8>,
     pub constants: Array<Value>,
     pub lines: Array<usize>,
@@ -43,7 +43,7 @@ impl Chunk {
 
 #[derive(FromRepr, Debug, PartialEq)]
 #[repr(u8)]
-pub enum OpCode {
+pub(crate) enum OpCode {
     Return,
     AddConstant,
     AddNil,
@@ -61,7 +61,7 @@ pub enum OpCode {
 }
 
 #[derive(Debug)]
-pub struct Disassembler<'d> {
+pub(crate) struct Disassembler<'d> {
     chunk: &'d Chunk,
     name: &'d str,
 }
@@ -70,7 +70,7 @@ pub struct Disassembler<'d> {
 ///
 /// Takes a Chunk as an input and disassembles the bytecode into a human readable format.
 impl<'d> Disassembler<'d> {
-    pub fn new(chunk: &'d Chunk, name: &'d str) -> Self {
+    pub(crate) fn new(chunk: &'d Chunk, name: &'d str) -> Self {
         Self { chunk, name }
     }
 
@@ -86,7 +86,7 @@ impl<'d> Disassembler<'d> {
         output
     }
 
-    pub fn disassemble_chunk(chunk: &'d Chunk, name: &'d str) -> String {
+    pub(crate) fn disassemble_chunk(chunk: &'d Chunk, name: &'d str) -> String {
         Self::new(&chunk, name).disassemble()
     }
 

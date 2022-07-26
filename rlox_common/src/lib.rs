@@ -1,3 +1,5 @@
 pub mod array;
 pub mod stack;
-pub mod value;
+
+pub use array::Array;
+pub use stack::Stack;

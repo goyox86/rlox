@@ -167,8 +167,9 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rlox_common",
- "rlox_compiler",
+ "rustc-hash",
  "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -176,16 +177,6 @@ name = "rlox_common"
 version = "0.1.0"
 dependencies = [
  "drop-tracker",
-]
-
-[[package]]
-name = "rlox_compiler"
-version = "0.1.0"
-dependencies = [
- "rlox_common",
- "rustc-hash",
- "strum",
- "strum_macros",
 ]
 
 [[package]]

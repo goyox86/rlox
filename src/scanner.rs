@@ -3,7 +3,7 @@ use std::str::Chars;
 use strum_macros::{EnumCount, EnumIter};
 
 #[derive(Clone, Copy, Debug, EnumCount, EnumIter, Hash, PartialEq, Eq)]
-pub enum TokenKind {
+pub(crate) enum TokenKind {
     // Single-char tokens
     LeftParen,
     RightParen,
@@ -16,6 +16,7 @@ pub enum TokenKind {
     Semicolon,
     Slash,
     Star,
+
     // One or two char tokens
     Bang,
     BangEqual,
@@ -25,10 +26,12 @@ pub enum TokenKind {
     GreaterEqual,
     Less,
     LessEqual,
+
     // Literals
     Identifier,
     String,
     Number,
+
     // Keywords
     And,
     Class,
@@ -69,7 +72,7 @@ impl TokenKind {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct Token<'source> {
+pub(crate) struct Token<'source> {
     pub kind: TokenKind,
     pub line: usize,
     pub start: usize,
@@ -107,7 +110,7 @@ impl<'source> Token<'source> {
 }
 
 #[derive(Debug)]
-pub struct Scanner<'source> {
+pub(crate) struct Scanner<'source> {
     chars: Chars<'source>,
     source: &'source str,
     current: usize,

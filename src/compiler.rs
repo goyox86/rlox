@@ -1,17 +1,15 @@
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
-use strum::{EnumCount, FromRepr};
+use strum::FromRepr;
 
 use crate::{
     bytecode::{Chunk, Disassembler, OpCode},
     scanner::{Scanner, Token, TokenKind},
+    value::{Obj, String, Value},
 };
-use rlox_common::value::Value;
 
-use std::collections::HashMap;
-
-type ParseFn = fn(&mut CompilerCtx) -> Result<(), CompilerError>;
+pub(crate) type ParseFn = fn(&mut CompilerCtx) -> Result<(), CompilerError>;
 
 #[derive(Copy, Clone, Default)]
 pub struct ParseRule(Option<ParseFn>, Option<ParseFn>, Precedence);
@@ -70,15 +68,15 @@ impl Precedence {
 }
 
 #[derive(Debug, Default)]
-pub struct CompilerOptions {
+pub(crate) struct CompilerOptions {
     pub print_code: bool,
 }
 
-pub struct Compiler<'c> {
+pub(crate) struct Compiler<'c> {
     options: Option<&'c CompilerOptions>,
 }
 
-struct CompilerCtx<'source> {
+pub(crate) struct CompilerCtx<'source> {
     chunk: Chunk,
     previous: Token<'source>,
     current: Token<'source>,
@@ -176,7 +174,10 @@ impl<'source> CompilerCtx<'source> {
             TokenKind::Identifier,
             ParseRule(None, None, Precedence::None),
         );
-        rules.insert(TokenKind::String, ParseRule(None, None, Precedence::None));
+        rules.insert(
+            TokenKind::String,
+            ParseRule(Some(string), None, Precedence::None),
+        );
         rules.insert(
             TokenKind::Number,
             ParseRule(Some(number), None, Precedence::None),
@@ -219,7 +220,7 @@ impl<'c> Compiler<'c> {
         Self { options }
     }
 
-    pub fn compile(&self, source: &str) -> Result<Chunk, CompilerError> {
+    pub(crate) fn compile(&self, source: &str) -> Result<Chunk, CompilerError> {
         let mut ctx = CompilerCtx::new(source, self.options);
 
         advance(&mut ctx);
@@ -284,6 +285,15 @@ fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     let value = Value::Number(number);
 
     Ok(emit_constant(ctx, value))
+}
+
+fn string(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    let lexeme = ctx.previous.lexeme().unwrap();
+    let chars = &lexeme[1..lexeme.len() - 1];
+    let string_obj = String::new(chars);
+    let string_value = Value::from_string(string_obj);
+
+    Ok(emit_constant(ctx, string_value))
 }
 
 fn literal(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
@@ -392,7 +402,7 @@ fn get_parse_rule(ctx: &mut CompilerCtx, token_kind: TokenKind) -> ParseRule {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CompilerError {
-    msg: String,
+    msg: std::string::String,
     line: usize,
 }
 
