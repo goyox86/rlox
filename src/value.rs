@@ -1,54 +1,60 @@
 use std::fmt::{self, Debug, Display};
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, Deref, DerefMut, Div, Mul, Neg, Sub};
+use std::ptr::NonNull;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub(crate) struct Obj {
-    inner: ObjInner,
+pub(crate) struct ObjPointer {
+    raw: NonNull<Obj>,
+}
+
+impl ObjPointer {
+    pub(crate) fn new(object: Obj) -> Self {
+        let boxed = Box::leak(Box::new(object));
+        Self {
+            raw: NonNull::new(boxed).expect("failed to get object ptr"),
+        }
+    }
+}
+
+impl Deref for ObjPointer {
+    type Target = Obj;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.raw.as_ref() }
+    }
+}
+
+impl DerefMut for ObjPointer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.raw.as_mut() }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub(crate) enum Obj {
+    String(String),
+}
+
+impl Obj {
+    pub fn from_string(string: String) -> Self {
+        Self::String(string)
+    }
 }
 
 impl Add for Obj {
     type Output = Obj;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            inner: self.inner + rhs.inner,
+        match (self, rhs) {
+            (Obj::String(left), Obj::String(right)) => Obj::String(left + right),
         }
-    }
-}
-
-impl Obj {
-    pub fn from_string(string_obj: String) -> Box<Self> {
-        Box::new(Self {
-            inner: ObjInner::String(string_obj),
-        })
     }
 }
 
 impl Display for Obj {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-enum ObjInner {
-    String(String),
-}
-
-impl Add for ObjInner {
-    type Output = ObjInner;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (ObjInner::String(left), ObjInner::String(right)) => ObjInner::String(left + right),
-        }
-    }
-}
-
-impl Display for ObjInner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ObjInner::String(object) => writeln!(f, "String(\"{}\")", object),
+            Obj::String(object) => writeln!(f, "String(\"{}\")", object),
         }
     }
 }
@@ -64,36 +70,31 @@ pub(crate) enum Value {
     Number(f64),
     Boolean(bool),
     Nil,
-    Obj(Box<Obj>),
+    Obj(ObjPointer),
 }
 
 impl Value {
-    pub fn from_string(string_obj: String) -> Self {
-        Self::Obj(Obj::from_string(string_obj))
-    }
-
-    pub fn as_number(&self) -> Option<&f64> {
-        match self {
-            Self::Number(v) => return Some(v),
-            _ => None,
-        }
-    }
-
-    pub fn as_boolean(&self) -> Option<bool> {
-        match self {
-            Self::Boolean(v) => return Some(*v),
-            _ => None,
-        }
+    pub fn from_string(string: String) -> Self {
+        Self::Obj(ObjPointer::new(Obj::from_string(string)))
     }
 
     pub fn nil() -> Self {
         Self::Nil
     }
 
+    pub fn r#true() -> Self {
+        Self::Boolean(true)
+    }
+
+    pub fn r#false() -> Self {
+        Self::Boolean(false)
+    }
+
     /// Returns `true` if the value is [`Number`].
     ///
     /// [`Number`]: Value::Number
     #[must_use]
+    #[inline]
     pub fn is_number(&self) -> bool {
         matches!(self, Self::Number(..))
     }
@@ -102,6 +103,7 @@ impl Value {
     ///
     /// [`Boolean`]: Value::Boolean
     #[must_use]
+    #[inline]
     pub fn is_boolean(&self) -> bool {
         matches!(self, Self::Boolean(..))
     }
@@ -110,11 +112,13 @@ impl Value {
     ///
     /// [`Nil`]: Value::Nil
     #[must_use]
+    #[inline]
     pub fn is_nil(&self) -> bool {
         matches!(self, Self::Nil)
     }
 
     #[must_use]
+    #[inline]
     pub fn is_falsey(&self) -> bool {
         matches!(self, Self::Nil | Self::Boolean(false))
     }
@@ -123,29 +127,42 @@ impl Value {
     ///
     /// [`Obj`]: Value::Obj
     #[must_use]
+    #[inline]
     pub fn is_obj(&self) -> bool {
         matches!(self, Self::Obj(..))
     }
 
-    /// Returns `true` if the value is [`String`].
-    ///
-    /// [`Obj`]: Value::Obj
     #[must_use]
+    #[inline]
     pub fn is_string(&self) -> bool {
-        self.is_obj()
-            && matches!(
-                **self.as_obj().unwrap(),
-                Obj {
-                    inner: ObjInner::String(..)
-                }
-            )
+        self.is_obj() && matches!(**self.as_obj().unwrap(), Obj::String(..))
     }
 
-    pub fn as_obj(&self) -> Option<&Box<Obj>> {
+    #[must_use]
+    #[inline]
+    pub fn as_obj(&self) -> Option<&ObjPointer> {
         if let Self::Obj(v) = self {
             Some(v)
         } else {
             None
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn as_number(&self) -> Option<&f64> {
+        match self {
+            Self::Number(v) => return Some(v),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn as_boolean(&self) -> Option<bool> {
+        match self {
+            Self::Boolean(v) => return Some(*v),
+            _ => None,
         }
     }
 }
@@ -156,7 +173,7 @@ impl fmt::Display for Value {
             Value::Number(inner) => write!(f, "{}", inner),
             Value::Boolean(inner) => write!(f, "{}", inner),
             Value::Nil => write!(f, "nil"),
-            Value::Obj(obj) => write!(f, "{}", *obj),
+            Value::Obj(obj) => write!(f, "{}", **obj),
         }
     }
 }
@@ -183,7 +200,8 @@ impl Add for Value {
                 Value::Number(number + rhs_number)
             }
             (Value::Obj(ref left), Value::Obj(ref right)) => {
-                Value::Obj(Box::new(*left.clone() + *right.clone()))
+                let new_obj = ObjPointer::new((**left).clone() + (**right).clone());
+                Value::Obj(new_obj)
             }
             (left, right) => panic!("unsupported addition between {} and {}", left, right),
         }
@@ -211,7 +229,7 @@ impl Div for Value {
             (Value::Number(number), Value::Number(rhs_number)) => {
                 Value::Number(number / rhs_number)
             }
-            (left, right) => panic!("unsupporte division between {} and {}", left, right),
+            (left, right) => panic!("unsupported division between {} and {}", left, right),
         }
     }
 }
