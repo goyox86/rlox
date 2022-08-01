@@ -1,18 +1,28 @@
+use std::collections::LinkedList;
 use std::fmt::{self, Debug, Display};
+use std::mem::forget;
 use std::ops::{Add, Deref, DerefMut, Div, Mul, Neg, Sub};
 use std::ptr::NonNull;
+use std::rc::Rc;
+use std::sync::Mutex;
+
+use crate::vm;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub(crate) struct ObjPointer {
-    raw: NonNull<Obj>,
+    pub raw: NonNull<Obj>,
 }
 
 impl ObjPointer {
     pub(crate) fn new(object: Obj) -> Self {
-        let boxed = Box::leak(Box::new(object));
+        let boxed = Box::into_raw(Box::new(object));
         Self {
             raw: NonNull::new(boxed).expect("failed to get object ptr"),
         }
+    }
+
+    pub fn as_ptr(&mut self) -> *mut Obj {
+        self.raw.as_ptr()
     }
 }
 
@@ -41,12 +51,12 @@ impl Obj {
     }
 }
 
-impl Add for Obj {
+impl Add for &Obj {
     type Output = Obj;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Obj::String(left), Obj::String(right)) => Obj::String(left + right),
+            (Obj::String(ref left), Obj::String(ref right)) => Obj::String(left + right),
         }
     }
 }
@@ -76,6 +86,10 @@ pub(crate) enum Value {
 impl Value {
     pub fn from_string(string: String) -> Self {
         Self::Obj(ObjPointer::new(Obj::from_string(string)))
+    }
+
+    pub fn from_obj(object_ptr: ObjPointer) -> Self {
+        Self::Obj(object_ptr)
     }
 
     pub fn nil() -> Self {
@@ -199,8 +213,8 @@ impl Add for Value {
             (Value::Number(number), Value::Number(rhs_number)) => {
                 Value::Number(number + rhs_number)
             }
-            (Value::Obj(ref left), Value::Obj(ref right)) => {
-                let new_obj = ObjPointer::new((**left).clone() + (**right).clone());
+            (Value::Obj(left), Value::Obj(right)) => {
+                let new_obj = vm::allocate_object(&*left + &*right);
                 Value::Obj(new_obj)
             }
             (left, right) => panic!("unsupported addition between {} and {}", left, right),
@@ -309,7 +323,7 @@ impl Display for String {
     }
 }
 
-impl Add for String {
+impl Add for &String {
     type Output = String;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -317,7 +331,7 @@ impl Add for String {
         new_chars.extend_from_slice(&self.chars);
         new_chars.extend_from_slice(&rhs.chars);
 
-        Self {
+        String {
             len: new_chars.len(),
             chars: new_chars,
         }

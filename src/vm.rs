@@ -1,10 +1,16 @@
+use std::collections::LinkedList;
+use std::rc::Rc;
+use std::string::String;
+use std::sync::Mutex;
 use std::{fmt::Display, ptr, result};
 
 use rlox_common::{Array, Stack};
 
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
-use crate::value::Value;
+use crate::value::{Obj, ObjPointer, String as LoxString, Value};
+
+pub(crate) static mut HEAP: Option<Vec<*mut Obj>> = None;
 
 #[derive(Debug)]
 pub(crate) struct VmOptions {
@@ -30,6 +36,21 @@ pub(crate) struct Vm {
     stack: Stack<Value>,
 }
 
+pub(crate) fn allocate_object(object: Obj) -> ObjPointer {
+    let mut object = ObjPointer::new(object);
+    unsafe {
+        if let Some(heap) = &mut HEAP {
+            heap.push(object.as_ptr());
+        } else {
+            let mut heap = Vec::new();
+            heap.push(object.as_ptr());
+            HEAP = Some(heap);
+        }
+
+        object
+    }
+}
+
 impl Vm {
     pub fn new(options: Option<VmOptions>) -> Self {
         let options = options.unwrap_or_default();
@@ -50,13 +71,15 @@ impl Vm {
         self.chunk = Some(chunk);
         self.ip = ip_start;
 
-        run(self)
+        let result = run(self);
+        self.free_objects();
+        result
     }
 
     pub fn compile(&mut self) -> Result<Chunk, VmError> {
-        let source = self.source.as_ref().unwrap();
-        let mut compiler = Compiler::new(Some(&self.options.compiler));
-        let chunk = compiler.compile(source)?;
+        let source = self.source.as_ref().unwrap().clone();
+        let mut compiler = Compiler::new(None);
+        let chunk = compiler.compile(&source)?;
 
         Ok(chunk)
     }
@@ -95,6 +118,17 @@ impl Vm {
     #[inline]
     fn reset_stack(&mut self) {
         self.stack.reset();
+    }
+
+    pub fn free_objects(&mut self) {
+        unsafe {
+            if let Some(heap) = &mut HEAP {
+                while let Some(object) = heap.pop() {
+                    let object = unsafe { Box::from_raw(object) };
+                    drop(object);
+                }
+            }
+        }
     }
 
     #[inline]

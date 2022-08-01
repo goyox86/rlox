@@ -7,12 +7,13 @@ use crate::{
     bytecode::{Chunk, Disassembler, OpCode},
     scanner::{Scanner, Token, TokenKind},
     value::{Obj, String, Value},
+    vm::{self, Vm},
 };
 
 pub(crate) type ParseFn = fn(&mut CompilerCtx) -> Result<(), CompilerError>;
 
 #[derive(Copy, Clone, Default)]
-pub struct ParseRule(Option<ParseFn>, Option<ParseFn>, Precedence);
+pub(crate) struct ParseRule(Option<ParseFn>, Option<ParseFn>, Precedence);
 
 impl ParseRule {
     fn prefix(&self) -> Option<ParseFn> {
@@ -33,7 +34,7 @@ type ParseRules = FxHashMap<TokenKind, ParseRule>;
 // From lowest to higest precedence
 #[derive(Copy, FromRepr, Clone, Debug, Default, PartialEq, PartialOrd)]
 #[repr(u8)]
-pub enum Precedence {
+pub(crate) enum Precedence {
     #[default]
     None = 0,
     Assignment = 1,
@@ -220,7 +221,7 @@ impl<'c> Compiler<'c> {
         Self { options }
     }
 
-    pub(crate) fn compile(&self, source: &str) -> Result<Chunk, CompilerError> {
+    pub(crate) fn compile(&self, source: &'c str) -> Result<Chunk, CompilerError> {
         let mut ctx = CompilerCtx::new(source, self.options);
 
         advance(&mut ctx);
@@ -290,8 +291,8 @@ fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
 fn string(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     let lexeme = ctx.previous.lexeme().unwrap();
     let chars = &lexeme[1..lexeme.len() - 1];
-    let string_obj = String::new(chars);
-    let string_value = Value::from_string(string_obj);
+    let string_obj = vm::allocate_object(Obj::String(String::new(chars)));
+    let string_value = Value::Obj(string_obj);
 
     Ok(emit_constant(ctx, string_value))
 }
