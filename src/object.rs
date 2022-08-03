@@ -64,7 +64,7 @@ impl Add for &Obj {
 impl Display for Obj {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Obj::String(object) => writeln!(f, "String(\"{}\")", object),
+            Obj::String(object) => write!(f, "String(\"{}\")", object),
         }
     }
 }
