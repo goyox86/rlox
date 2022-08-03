@@ -48,6 +48,12 @@ impl<T: Debug + Display> Display for Stack<T> {
     }
 }
 
+impl<T> Default for Stack<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

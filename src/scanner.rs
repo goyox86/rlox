@@ -146,20 +146,14 @@ impl<'source> Scanner<'source> {
     pub fn peek(&mut self) -> Option<char> {
         let mut peekable = self.chars.clone();
 
-        match peekable.next() {
-            None => None,
-            Some(ch) => Some(ch),
-        }
+        peekable.next()
     }
 
     pub fn peek_next(&mut self) -> Option<char> {
         let mut peekable = self.chars.clone();
 
         peekable.next();
-        match peekable.next() {
-            None => None,
-            Some(ch) => Some(ch),
-        }
+        peekable.next()
     }
 
     pub fn matches(&mut self, c: char) -> bool {
@@ -224,7 +218,7 @@ impl<'source> Scanner<'source> {
             return self.identifier();
         }
 
-        if c.is_digit(10) {
+        if c.is_ascii_digit() {
             return self.number();
         }
 
@@ -306,7 +300,7 @@ impl<'source> Scanner<'source> {
 
     fn number(&mut self) -> Token<'source> {
         while let Some(c) = self.peek() {
-            if c.is_digit(10) {
+            if c.is_ascii_digit() {
                 self.advance();
             } else {
                 break;
@@ -315,11 +309,11 @@ impl<'source> Scanner<'source> {
 
         if let Some(c) = self.peek() {
             if let Some(after_dot) = self.peek_next() {
-                if c == '.' && after_dot.is_digit(10) {
+                if c == '.' && after_dot.is_ascii_digit() {
                     self.advance();
 
                     while let Some(c) = self.peek() {
-                        if c.is_digit(10) {
+                        if c.is_ascii_digit() {
                             self.advance();
                         } else {
                             break;
@@ -334,7 +328,7 @@ impl<'source> Scanner<'source> {
 
     fn identifier(&mut self) -> Token<'source> {
         while let Some(c) = self.peek() {
-            if self.is_alpha(c) || c.is_digit(10) {
+            if self.is_alpha(c) || c.is_ascii_digit() {
                 self.advance();
             } else {
                 break;

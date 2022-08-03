@@ -235,17 +235,13 @@ impl<'c> Compiler<'c> {
 }
 
 fn expression(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
-    Ok(parse_precedence(ctx, Precedence::Assignment)?)
+    parse_precedence(ctx, Precedence::Assignment)
 }
 
 fn grouping(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     expression(ctx)?;
 
-    Ok(consume(
-        ctx,
-        TokenKind::RightParen,
-        "expect ')' after expression.",
-    )?)
+    consume(ctx, TokenKind::RightParen, "expect ')' after expression.")
 }
 
 fn binary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
@@ -255,18 +251,20 @@ fn binary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     parse_precedence(ctx, rule.precedence().higher())?;
 
     match previous_token.kind {
-        TokenKind::BangEqual => Ok(emit_bytes(ctx, OpCode::Equal as u8, OpCode::Not as u8)),
-        TokenKind::EqualEqual => Ok(emit_byte(ctx, OpCode::Equal as u8)?),
-        TokenKind::Greater => Ok(emit_byte(ctx, OpCode::Greater as u8)?),
-        TokenKind::GreaterEqual => Ok(emit_bytes(ctx, OpCode::Less as u8, OpCode::Not as u8)),
-        TokenKind::Less => Ok(emit_byte(ctx, OpCode::Less as u8)?),
-        TokenKind::LessEqual => Ok(emit_bytes(ctx, OpCode::Greater as u8, OpCode::Not as u8)),
-        TokenKind::Plus => Ok(emit_byte(ctx, OpCode::Add as u8)?),
-        TokenKind::Minus => Ok(emit_byte(ctx, OpCode::Substract as u8)?),
-        TokenKind::Star => Ok(emit_byte(ctx, OpCode::Multiply as u8)?),
-        TokenKind::Slash => Ok(emit_byte(ctx, OpCode::Divide as u8)?),
-        _ => return Ok(()),
-    }
+        TokenKind::BangEqual => emit_bytes(ctx, OpCode::Equal as u8, OpCode::Not as u8),
+        TokenKind::EqualEqual => emit_byte(ctx, OpCode::Equal as u8),
+        TokenKind::Greater => emit_byte(ctx, OpCode::Greater as u8),
+        TokenKind::GreaterEqual => emit_bytes(ctx, OpCode::Less as u8, OpCode::Not as u8),
+        TokenKind::Less => emit_byte(ctx, OpCode::Less as u8),
+        TokenKind::LessEqual => emit_bytes(ctx, OpCode::Greater as u8, OpCode::Not as u8),
+        TokenKind::Plus => emit_byte(ctx, OpCode::Add as u8),
+        TokenKind::Minus => emit_byte(ctx, OpCode::Substract as u8),
+        TokenKind::Star => emit_byte(ctx, OpCode::Multiply as u8),
+        TokenKind::Slash => emit_byte(ctx, OpCode::Divide as u8),
+        _ => (),
+    };
+
+    Ok(())
 }
 
 fn unary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
@@ -275,10 +273,12 @@ fn unary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     parse_precedence(ctx, Precedence::Unary)?;
 
     match token_kind {
-        TokenKind::Bang => Ok(emit_byte(ctx, OpCode::Not as u8)?),
-        TokenKind::Minus => Ok(emit_byte(ctx, OpCode::Negate as u8)?),
+        TokenKind::Bang => emit_byte(ctx, OpCode::Not as u8),
+        TokenKind::Minus => emit_byte(ctx, OpCode::Negate as u8),
         _ => unreachable!(),
     }
+
+    Ok(())
 }
 
 fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
@@ -286,7 +286,8 @@ fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     let number: f64 = f64::from_str(previous_token.lexeme().unwrap()).unwrap();
     let value = Value::Number(number);
 
-    Ok(emit_constant(ctx, value))
+    emit_constant(ctx, value);
+    Ok(())
 }
 
 fn string(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
@@ -295,18 +296,21 @@ fn string(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     let string_obj = vm::allocate_object(Obj::String(String::new(chars)));
     let string_value = Value::Obj(string_obj);
 
-    Ok(emit_constant(ctx, string_value))
+    emit_constant(ctx, string_value);
+    Ok(())
 }
 
 fn literal(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     let previous_token = ctx.previous;
 
     match previous_token.kind {
-        TokenKind::False => Ok(emit_byte(ctx, OpCode::AddFalse as u8)?),
-        TokenKind::Nil => Ok(emit_byte(ctx, OpCode::AddNil as u8)?),
-        TokenKind::True => Ok(emit_byte(ctx, OpCode::AddTrue as u8)?),
+        TokenKind::False => emit_byte(ctx, OpCode::AddFalse as u8),
+        TokenKind::Nil => emit_byte(ctx, OpCode::AddNil as u8),
+        TokenKind::True => emit_byte(ctx, OpCode::AddTrue as u8),
         _ => unreachable!(),
     }
+
+    Ok(())
 }
 
 #[inline(always)]
@@ -332,7 +336,7 @@ fn consume(
 }
 
 fn end(ctx: &mut CompilerCtx) {
-    let _ = emit_return(ctx);
+    emit_return(ctx);
 
     if let Some(options) = ctx.options {
         if options.print_code && !ctx.had_error {
@@ -367,7 +371,7 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
 }
 
 #[inline(always)]
-fn emit_return(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+fn emit_return(ctx: &mut CompilerCtx) {
     emit_byte(ctx, OpCode::Return as u8)
 }
 
@@ -378,22 +382,21 @@ fn emit_constant(ctx: &mut CompilerCtx, value: Value) {
 }
 
 #[inline(always)]
-fn emit_byte(ctx: &mut CompilerCtx, byte: u8) -> Result<(), CompilerError> {
+fn emit_byte(ctx: &mut CompilerCtx, byte: u8) {
     let line = ctx.previous.line;
 
-    Ok(ctx.chunk.write(byte, line))
+    ctx.chunk.write(byte, line)
 }
 
 #[inline(always)]
 fn emit_bytes(ctx: &mut CompilerCtx, byte1: u8, byte2: u8) {
-    let _ = emit_byte(ctx, byte1);
-    let _ = emit_byte(ctx, byte2);
+    emit_byte(ctx, byte1);
+    emit_byte(ctx, byte2);
 }
 
 #[inline(always)]
 fn make_constant(ctx: &mut CompilerCtx, value: Value) -> u8 {
-    let constant_idx = ctx.chunk.add_constant(value) as u8;
-    constant_idx
+    ctx.chunk.add_constant(value) as u8
 }
 
 fn get_parse_rule(ctx: &mut CompilerCtx, token_kind: TokenKind) -> ParseRule {

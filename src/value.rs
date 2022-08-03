@@ -106,7 +106,7 @@ impl Value {
     #[inline]
     pub fn as_number(&self) -> Option<&f64> {
         match self {
-            Self::Number(v) => return Some(v),
+            Self::Number(v) => Some(v),
             _ => None,
         }
     }
@@ -115,7 +115,7 @@ impl Value {
     #[inline]
     pub fn as_boolean(&self) -> Option<bool> {
         match self {
-            Self::Boolean(v) => return Some(*v),
+            Self::Boolean(v) => Some(*v),
             _ => None,
         }
     }

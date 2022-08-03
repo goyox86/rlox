@@ -13,19 +13,10 @@ use crate::value::Value;
 
 pub(crate) static mut HEAP: Option<LinkedList<ObjPointer>> = None;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct VmOptions {
     pub trace_execution: bool,
     pub compiler: CompilerOptions,
-}
-
-impl Default for VmOptions {
-    fn default() -> Self {
-        Self {
-            trace_execution: false,
-            compiler: Default::default(),
-        }
-    }
 }
 
 #[derive(Debug)]

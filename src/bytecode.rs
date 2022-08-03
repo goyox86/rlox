@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use strum::FromRepr;
 
 use crate::value::Value;
@@ -87,7 +89,7 @@ impl<'d> Disassembler<'d> {
     }
 
     pub(crate) fn disassemble_chunk(chunk: &'d Chunk, name: &'d str) -> String {
-        Self::new(&chunk, name).disassemble()
+        Self::new(chunk, name).disassemble()
     }
 
     pub fn disassemble_instruction<'output>(
@@ -95,12 +97,12 @@ impl<'d> Disassembler<'d> {
         offset: usize,
         output: &'output mut String,
     ) -> (usize, &'output String) {
-        output.push_str(&format!("{:0<4} ", offset));
+        write!(output, "{:0<4} ", offset);
 
         if offset > 0 && self.chunk.lines[offset] == self.chunk.lines[offset - 1] {
-            output.push_str("   | ");
+            write!(output, "   | ");
         } else {
-            output.push_str(&format!("{:0>4} ", self.chunk.lines[offset]));
+            write!(output, "{:0>4} ", self.chunk.lines[offset]);
         }
 
         let opcode: OpCode =
@@ -128,18 +130,20 @@ impl<'d> Disassembler<'d> {
     }
 
     fn simple_instruction(&self, name: &str, offset: usize, output: &mut String) -> usize {
-        output.push_str(&format!("{}\n", name));
+        writeln!(output, "{}", name);
         offset + 1
     }
 
     fn constant_instruction(&self, name: &str, offset: usize, output: &mut String) -> usize {
         let constant = self.chunk.code[offset + 1];
-        output.push_str(&format!(
-            "{:<16} {:<4} '{}'\n",
+
+        writeln!(
+            output,
+            "{:<16} {:<4} '{}'",
             name,
             constant,
             self.chunk.constants[constant.into()]
-        ));
+        );
         offset + 2
     }
 }

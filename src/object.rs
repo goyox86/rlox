@@ -13,7 +13,7 @@ pub(crate) struct ObjPointer {
 impl ObjPointer {
     pub(crate) fn new(object: Obj) -> Self {
         let boxed = Box::into_raw(Box::new(object));
-        // SAFETY: object is always valid value, into_raw promises a well-aligned non-null pointer.
+        // Safety: object is always valid value, into_raw promises a well-aligned non-null pointer.
         unsafe {
             Self {
                 raw: NonNull::new_unchecked(boxed),
