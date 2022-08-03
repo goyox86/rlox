@@ -6,68 +6,8 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::Mutex;
 
+use crate::object::{Obj, ObjPointer, String};
 use crate::vm;
-
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub(crate) struct ObjPointer {
-    pub raw: NonNull<Obj>,
-}
-
-impl ObjPointer {
-    pub(crate) fn new(object: Obj) -> Self {
-        let boxed = Box::into_raw(Box::new(object));
-        Self {
-            raw: NonNull::new(boxed).expect("failed to get object ptr"),
-        }
-    }
-
-    pub fn as_ptr(&mut self) -> *mut Obj {
-        self.raw.as_ptr()
-    }
-}
-
-impl Deref for ObjPointer {
-    type Target = Obj;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.raw.as_ref() }
-    }
-}
-
-impl DerefMut for ObjPointer {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.raw.as_mut() }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub(crate) enum Obj {
-    String(String),
-}
-
-impl Obj {
-    pub fn from_string(string: String) -> Self {
-        Self::String(string)
-    }
-}
-
-impl Add for &Obj {
-    type Output = Obj;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Obj::String(ref left), Obj::String(ref right)) => Obj::String(left + right),
-        }
-    }
-}
-
-impl Display for Obj {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Obj::String(object) => writeln!(f, "String(\"{}\")", object),
-        }
-    }
-}
 
 // TODO: we don't know if we need this for our implementation
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
@@ -294,46 +234,5 @@ impl From<f64> for Value {
 impl From<bool> for Value {
     fn from(inner: bool) -> Self {
         Self::Boolean(inner)
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub(crate) struct String {
-    pub len: usize,
-    pub chars: Vec<char>,
-}
-
-impl String {
-    pub fn new(chars: &str) -> Self {
-        Self {
-            len: chars.len(),
-            chars: chars.to_owned().chars().collect(),
-        }
-    }
-}
-
-impl Display for String {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for c in self.chars.iter() {
-            write!(f, "{}", c)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Add for &String {
-    type Output = String;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let mut new_chars = vec![];
-        new_chars.extend_from_slice(&self.chars);
-        new_chars.extend_from_slice(&rhs.chars);
-
-        String {
-            len: new_chars.len(),
-            chars: new_chars,
-        }
     }
 }

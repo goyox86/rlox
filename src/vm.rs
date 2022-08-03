@@ -8,9 +8,10 @@ use rlox_common::{Array, Stack};
 
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
-use crate::value::{Obj, ObjPointer, String as LoxString, Value};
+use crate::object::{Obj, ObjPointer, String as LoxString};
+use crate::value::Value;
 
-pub(crate) static mut HEAP: Option<Vec<*mut Obj>> = None;
+pub(crate) static mut HEAP: Option<LinkedList<ObjPointer>> = None;
 
 #[derive(Debug)]
 pub(crate) struct VmOptions {
@@ -37,17 +38,18 @@ pub(crate) struct Vm {
 }
 
 pub(crate) fn allocate_object(object: Obj) -> ObjPointer {
-    let mut object = ObjPointer::new(object);
+    let mut object_ptr = ObjPointer::new(object);
+
     unsafe {
         if let Some(heap) = &mut HEAP {
-            heap.push(object.as_ptr());
+            heap.push_back(object_ptr);
         } else {
-            let mut heap = Vec::new();
-            heap.push(object.as_ptr());
-            HEAP = Some(heap);
-        }
+            let mut heap = LinkedList::new();
+            heap.push_back(object_ptr);
+            HEAP = Some(heap)
+        };
 
-        object
+        object_ptr
     }
 }
 
@@ -122,9 +124,13 @@ impl Vm {
 
     pub fn free_objects(&mut self) {
         unsafe {
+            if HEAP.is_none() {
+                return;
+            }
+
             if let Some(heap) = &mut HEAP {
-                while let Some(object) = heap.pop() {
-                    let object = unsafe { Box::from_raw(object) };
+                while let Some(mut object_ptr) = heap.pop_back() {
+                    let object = Box::from_raw(object_ptr.as_ptr());
                     drop(object);
                 }
             }
