@@ -39,7 +39,7 @@ impl Chunk {
     }
 
     pub fn start(&self) -> *mut u8 {
-        self.code.as_ptr()
+        self.ptr()
     }
 }
 

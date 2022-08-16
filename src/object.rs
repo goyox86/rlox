@@ -69,7 +69,7 @@ impl Display for Obj {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd)]
 pub(crate) struct String {
     pub len: usize,
     pub chars: Vec<char>,
