@@ -1,37 +1,31 @@
 use std::{
-    alloc::{alloc, dealloc, Layout},
-    marker::PhantomData,
-    ops::{Index, IndexMut},
-    ptr::{self, NonNull},
+    ops::{Deref, DerefMut},
+    ptr, slice,
 };
+
+use crate::raw_array::RawArray;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Array<T> {
     count: usize,
-    capacity: usize,
-    ptr: NonNull<T>,
-    pub _marker: PhantomData<T>,
+    buf: RawArray<T>,
 }
 
 impl<T> Array<T> {
     pub fn new() -> Self {
-        let ptr = NonNull::dangling();
-
         Self {
             count: 0,
-            capacity: 0,
-            ptr,
-            _marker: PhantomData,
+            buf: RawArray::new(),
         }
     }
 
     #[inline]
     pub fn push(&mut self, value: T) {
         if self.needs_to_grow() {
-            self.grow_array();
+            self.grow();
         }
 
-        unsafe { self.ptr.as_ptr().add(self.count).write(value) };
+        unsafe { self.buf.as_ptr().add(self.count).write(value) };
         self.count += 1;
     }
 
@@ -47,7 +41,7 @@ impl<T> Array<T> {
 
         unsafe {
             self.count -= 1;
-            let value: T = ptr::read(self.ptr.as_ptr().add(self.count));
+            let value: T = ptr::read(self.buf.as_ptr().add(self.count));
             Some(value)
         }
     }
@@ -69,7 +63,7 @@ impl<T> Array<T> {
     #[inline]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.len() {
-            unsafe { Some(&*self.ptr.as_ptr().add(index)) }
+            unsafe { Some(&*self.buf.as_ptr().add(index)) }
         } else {
             None
         }
@@ -91,21 +85,17 @@ impl<T> Array<T> {
 
     #[inline]
     pub fn as_ptr(&self) -> *mut T {
-        self.ptr.as_ptr()
+        self.buf.as_ptr()
     }
 
     #[inline]
     pub fn as_mut_ptr(&self) -> *mut T {
-        self.ptr.as_ptr()
-    }
-
-    fn current_memory(&self) -> Layout {
-        Layout::array::<T>(self.capacity()).expect("failed to obtain memory layout")
+        self.buf.as_ptr()
     }
 
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.capacity
+        self.buf.capacity()
     }
 
     #[inline]
@@ -118,60 +108,26 @@ impl<T> Array<T> {
         self.count
     }
 
-    fn grow_capacity(&mut self) -> usize {
-        if self.capacity < 8 {
-            8
-        } else {
-            self.capacity * 2
-        }
-    }
-
     fn needs_to_grow(&self) -> bool {
-        self.capacity < self.count + 1
+        self.capacity() < self.count + 1
     }
 
-    fn grow_array(&mut self) {
-        let old_ptr = self.ptr;
-        let old_capacity = self.capacity();
-        let old_layout = self.current_memory();
-        self.capacity = self.grow_capacity();
-        let new_layout = self.current_memory();
-
-        unsafe {
-            let new_ptr = alloc(new_layout);
-            self.ptr = NonNull::new_unchecked(new_ptr.cast());
-            ptr::copy(
-                old_ptr.as_ptr() as *const T,
-                self.ptr.as_ptr().cast(),
-                old_capacity,
-            );
-
-            if old_capacity > 0 {
-                dealloc(old_ptr.as_ptr().cast(), old_layout);
-            }
-        }
+    fn grow(&mut self) {
+        self.buf.grow(None);
     }
 }
 
-impl<T> Index<usize> for Array<T> {
-    type Output = T;
+impl<T> Deref for Array<T> {
+    type Target = [T];
 
-    fn index(&self, index: usize) -> &Self::Output {
-        self.get(index).unwrap_or_else(|| {
-            panic!(
-                "index out of bounds: len is {} but index is {}",
-                self.len(),
-                index
-            )
-        })
+    fn deref(&self) -> &Self::Target {
+        unsafe { slice::from_raw_parts(self.buf.as_ptr() as *const T, self.buf.capacity()) }
     }
 }
 
-impl<T> IndexMut<usize> for Array<T> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let len = self.len();
-        self.get_mut(index)
-            .unwrap_or_else(|| panic!("index out of bounds: len is {} but index is {}", len, index))
+impl<T> DerefMut for Array<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { slice::from_raw_parts_mut(self.buf.as_ptr() as *mut T, self.buf.capacity()) }
     }
 }
 
@@ -184,7 +140,7 @@ impl<T> Default for Array<T> {
 
 impl<T> Drop for Array<T> {
     fn drop(&mut self) {
-        unsafe { ptr::drop_in_place(ptr::slice_from_raw_parts_mut(self.ptr.as_ptr(), self.count)) };
+        while let Some(_) = self.pop() {}
     }
 }
 
@@ -298,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "index out of bounds: len is 0 but index is 2")]
+    #[should_panic(expected = "index out of bounds: the len is 0 but the index is 2")]
     fn test_index_when_empty() {
         let array: Array<String> = Array::new();
 
@@ -314,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "index out of bounds: len is 0 but index is 1")]
+    #[should_panic(expected = "index out of bounds: the len is 0 but the index is 1")]
     fn test_index_mut_when_empty() {
         let mut array: Array<String> = Array::new();
         let a = &mut array[1];

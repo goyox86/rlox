@@ -140,9 +140,7 @@ impl<'d> Disassembler<'d> {
         writeln!(
             output,
             "{:<16} {:<4} '{}'",
-            name,
-            constant,
-            self.chunk.constants[constant.into()]
+            name, constant, &self.chunk.constants[constant as usize]
         );
         offset + 2
     }
