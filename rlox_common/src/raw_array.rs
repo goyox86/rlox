@@ -1,5 +1,5 @@
 use std::{
-    alloc::{alloc, dealloc, Layout},
+    alloc::{alloc, alloc_zeroed, dealloc, Layout},
     marker::PhantomData,
     ptr::{self, NonNull},
 };
@@ -58,23 +58,24 @@ impl<T> RawArray<T> {
     }
 
     pub fn grow(&mut self, capacity: Option<usize>) {
-        let current_ptr = self.ptr;
-        let current_layout = self.layout_for(self.capacity);
-        let current_capacity = self.capacity;
+        let old_ptr = self.ptr;
+        let old_layout = self.layout_for(self.capacity);
+        let old_capacity = self.capacity;
         self.capacity = capacity.unwrap_or(self.grow_capacity());
         let new_layout = self.layout_for(self.capacity);
 
         unsafe {
-            let new_ptr = alloc(new_layout);
+            // TODO: Check if there is a way of getting this without zeroing.
+            let new_ptr = alloc_zeroed(new_layout);
             self.ptr = NonNull::new_unchecked(new_ptr.cast());
             ptr::copy(
-                current_ptr.as_ptr() as *const T,
+                old_ptr.as_ptr() as *const T,
                 self.ptr.as_ptr().cast(),
-                current_capacity,
+                old_capacity,
             );
 
-            if current_capacity > 0 {
-                dealloc(current_ptr.as_ptr().cast(), current_layout);
+            if old_capacity > 0 {
+                dealloc(old_ptr.as_ptr().cast(), old_layout);
             }
         }
     }

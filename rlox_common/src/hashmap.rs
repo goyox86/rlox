@@ -26,38 +26,53 @@ where
             self.entries.grow(None);
         }
 
-        let index = (self.hash(&key) as usize) % self.entries.capacity();
+        let mut index = (self.hash(key.borrow()) % self.capacity() as u64) as usize;
 
-        if self.find_entry(index).is_vacant() {
-            self.set_entry(index, Entry::Occupied { key, value });
-            self.len += 1;
-            return true;
-        }
-
-        while let Entry::Occupied {
-            key: ekey,
-            value: _,
-        } = &mut self.find_entry(index)
-        {
-            if ekey == &key {
-                self.set_entry(index, Entry::Occupied { key, value });
-                break;
+        loop {
+            let entry = self.find_entry(index);
+            match entry {
+                Entry::Vacant => {
+                    self.set_entry(index, Entry::Occupied { key, value });
+                    self.len += 1;
+                    break true;
+                }
+                Entry::Occupied {
+                    key: ekey,
+                    value: _evalue,
+                } => {
+                    if ekey == key.borrow() {
+                        self.set_entry(index, Entry::new(key, value));
+                        break true;
+                    } else {
+                        index = (index + 1) % self.capacity();
+                    }
+                }
             }
         }
-
-        true
     }
 
     pub fn get(&mut self, key: K) -> Option<&V> {
-        let index = (self.hash(&key) as usize) % self.entries.capacity();
+        if self.is_empty() {
+            return None;
+        }
 
-        match self.find_entry(index) {
-            Entry::Vacant => None,
-            Entry::Occupied { key: ekey, value } => {
-                return if ekey == key.borrow() {
-                    Some(&value)
-                } else {
-                    None
+        let mut index = (self.hash(key.borrow()) % self.capacity() as u64) as usize;
+
+        loop {
+            let entry = self.find_entry(index);
+            match entry {
+                Entry::Vacant => {
+                    break None;
+                }
+                Entry::Occupied {
+                    key: ekey,
+                    value: evalue,
+                } => {
+                    if ekey == key.borrow() {
+                        break Some(evalue);
+                    } else {
+                        index = (index + 1) % self.capacity();
+                    }
                 }
             }
         }
@@ -69,12 +84,16 @@ where
         hasher.finish()
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn capacity(&self) -> usize {
+        self.entries.capacity()
+    }
+
+    pub fn len(&self) -> usize {
         self.len
     }
 
-    pub(crate) fn set_len(&mut self, len: usize) {
-        self.len = len;
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     #[inline]
@@ -135,6 +154,14 @@ impl<K, V> Entry<K, V> {
     pub(crate) fn is_vacant(&self) -> bool {
         matches!(self, Self::Vacant)
     }
+
+    /// Returns `true` if the entry is [`Occupied`].
+    ///
+    /// [`Occupied`]: Entry::Occupied
+    #[must_use]
+    pub fn is_occupied(&self) -> bool {
+        matches!(self, Self::Occupied { .. })
+    }
 }
 
 impl<K, V> Default for Entry<K, V> {
@@ -155,10 +182,44 @@ mod tests {
     }
 
     #[test]
-    fn test_foo() {
+    fn test_set_empty() {
+        let mut map: HashMap<&str, Foo> = HashMap::new();
+        assert_eq!(true, map.is_empty());
+        map.set("1", Foo { bar: 2 });
+        assert_eq!(Some(&Foo { bar: 2 }), map.get("1"));
+        assert_eq!(1, map.len());
+    }
+
+    #[test]
+    fn test_set_non_empty_same_key() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
         map.set("1", Foo { bar: 1 });
         map.set("1", Foo { bar: 2 });
-        assert_eq!(Some(&Foo { bar: 2 }), map.get(&"1"))
+        assert_eq!(Some(&Foo { bar: 2 }), map.get("1"));
+        assert_eq!(1, map.len());
+    }
+
+    #[test]
+    fn test_set_non_empty_diff_key() {
+        let mut map: HashMap<&str, Foo> = HashMap::new();
+        map.set("1", Foo { bar: 1 });
+        map.set("2", Foo { bar: 2 });
+        assert_eq!(Some(&Foo { bar: 1 }), map.get("1"));
+        assert_eq!(Some(&Foo { bar: 2 }), map.get("2"));
+        assert_eq!(2, map.len());
+    }
+
+    #[test]
+    fn test_set_non_empty_many() {
+        use rand::prelude::*;
+
+        let mut map: HashMap<usize, Foo> = HashMap::new();
+        for _ in 0..10_000 {
+            let key: usize = random();
+            map.set(key, Foo { bar: 1 });
+            assert_eq!(Some(&Foo { bar: 1 }), map.get(key));
+        }
+
+        assert_eq!(10_000, 10_000);
     }
 }

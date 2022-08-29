@@ -32,16 +32,7 @@ struct Args {
     file_path: Option<PathBuf>,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq)]
-struct Foo {
-    bar: usize,
-}
 fn main() -> std::io::Result<()> {
-    // let mut map: HashMap<&str, Foo> = HashMap::new();
-    // map.set("1", Foo { bar: 1 });
-    // map.set("1", Foo { bar: 1 });
-    // assert_eq!(Some(&Foo { bar: 1 }), map.get(&"1"));
     let args = Args::parse();
     let vm_opts = vm::VmOptions {
         trace_execution: args.trace_execution,
