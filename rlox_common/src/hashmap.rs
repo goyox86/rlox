@@ -21,120 +21,31 @@ where
         Self::default()
     }
 
-    // pub fn set(&mut self, key: K, value: V) -> bool {
-    //     if self.needs_to_grow() {
-    //         self.entries.grow(None);
-    //     }
-    //
-    //     let mut index = self.index(key.borrow());
-    //
-    //     loop {
-    //         let entry = self.find_entry(index);
-    //         match entry {
-    //             Entry::Vacant => {
-    //                 self.set_entry(index, Entry::Occupied { key, value });
-    //                 self.len += 1;
-    //                 break true;
-    //             }
-    //             Entry::Occupied {
-    //                 key: ekey,
-    //                 value: _evalue,
-    //             } => {
-    //                 if ekey == key.borrow() {
-    //                     self.set_entry(index, Entry::new(key, value));
-    //                     break true;
-    //                 } else {
-    //                     index = (index + 1) % self.capacity();
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
     pub fn set(&mut self, key: K, value: V) -> bool {
         if self.needs_to_grow() {
             self.entries.grow(None);
         }
 
-        // match self.find_entry2(&key) {
-        //     entry @ Entry::Vacant => {
-        //         *entry = Entry::Occupied { key, value };
-        //         self.len += 1;
-        //         return true;
-        //     }
-        //     entry @ Entry::Occupied { key: ekey, .. } => {
-        //         if ekey == key.borrow() {
-        //         } else {
-        //         }
-        //
-        //         *entry = Entry::Occupied { key, value };
-        //         self.len += 1;
-        //         return true;
-        //     }
-        // }
-        //
-        //
-
-        let entry = self.find_entry2(&key);
-
+        let entry = self.find_entry(&key);
         if entry.is_vacant() {
-            *entry = Entry::Occupied { key, value };
+            *entry = Entry::Occupied(OccupiedEntry { key, value });
             self.len += 1;
-            return true;
-        };
-
-        if entry.is_occupied() {
-            *entry = Entry::Occupied { key, value };
-            self.len += 1;
-            return true;
-        };
-        //     entry @ Entry::Vacant => {
-        //         *entry = Entry::Occupied { key, value };
-        //         self.len += 1;
-        //         return true;
-        //     }
-        //     entry @ Entry::Occupied { key: ekey, .. } => {
-        //         if ekey == key.borrow() {
-        //         } else {
-        //         }
-        //
-        //         *entry = Entry::Occupied { key, value };
-        //         self.len += 1;
-        //         return true;
-        //     }
-        // }
+            true
+        } else {
+            let occupied_entry = entry
+                .as_occupied_mut()
+                .expect("entry at this pount must be occupied");
+            let already_exists = occupied_entry.key() == key.borrow();
+            if already_exists {
+                occupied_entry.set_value(value);
+                false
+            } else {
+                *entry = Entry::occupied(key, value);
+                self.len += 1;
+                true
+            }
+        }
     }
-
-    // pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
-    // where
-    //     K: Borrow<Q>,
-    //     Q: Hash + Eq,
-    // {
-    //     if self.is_empty() {
-    //         return None;
-    //     }
-    //
-    //     let mut index = self.index(key.borrow());
-    //
-    //     loop {
-    //         let entry = self.find_entry(index);
-    //         match entry {
-    //             Entry::Vacant => {
-    //                 break None;
-    //             }
-    //             Entry::Occupied {
-    //                 key: ekey,
-    //                 value: evalue,
-    //             } => {
-    //                 if ekey.borrow() == key {
-    //                     break Some(evalue);
-    //                 } else {
-    //                     index = (index + 1) % self.capacity();
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
 
     pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
     where
@@ -145,14 +56,11 @@ where
             return None;
         }
 
-        match self.find_entry2(key) {
-            Entry::Vacant => None,
-            Entry::Occupied {
-                key: ekey,
-                value: evalue,
-            } => {
-                if <dyn Borrow<Q>>::borrow(ekey) == key {
-                    Some(evalue)
+        match self.find_entry(key) {
+            Entry::Vacant(_) => None,
+            Entry::Occupied(entry) => {
+                if <dyn Borrow<Q>>::borrow(entry.key()) == key {
+                    Some(entry.value())
                 } else {
                     None
                 }
@@ -160,7 +68,45 @@ where
         }
     }
 
-    pub fn index<Q: ?Sized>(&self, key: &Q) -> usize
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.entries.capacity()
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn find_entry<Q: ?Sized>(&self, key: &Q) -> &mut Entry<K, V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        let mut index = self.index(key.borrow());
+
+        loop {
+            let entry = self.get_entry(index);
+            match entry {
+                Entry::Vacant(_) => break self.get_entry_mut(index),
+                Entry::Occupied(entry) => {
+                    if entry.key().borrow() == key {
+                        break self.get_entry_mut(index);
+                    } else {
+                        index = (index + 1) % self.capacity();
+                    }
+                }
+            }
+        }
+    }
+
+    #[inline]
+    fn index<Q: ?Sized>(&self, key: &Q) -> usize
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
@@ -171,20 +117,8 @@ where
         (hash % self.capacity() as u64) as usize
     }
 
-    pub fn capacity(&self) -> usize {
-        self.entries.capacity()
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
     #[inline]
-    fn find_entry(&self, index: usize) -> &Entry<K, V> {
+    fn get_entry(&self, index: usize) -> &Entry<K, V> {
         assert!(
             index < self.entries.capacity(),
             "index out of bounds on buckets array"
@@ -193,31 +127,7 @@ where
         unsafe { &*self.entries.as_ptr().add(index) }
     }
 
-    pub fn find_entry2<Q: ?Sized>(&self, key: &Q) -> &mut Entry<K, V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        let mut index = self.index(key.borrow());
-
-        loop {
-            let entry = self.find_entry(index);
-            match entry {
-                Entry::Vacant => break self.get_entry_mut(index),
-                Entry::Occupied {
-                    key: ekey,
-                    value: _evalue,
-                } => {
-                    if ekey.borrow() == key {
-                        break self.get_entry_mut(index);
-                    } else {
-                        index = (index + 1) % self.capacity();
-                    }
-                }
-            }
-        }
-    }
-
+    #[inline]
     fn get_entry_mut(&self, index: usize) -> &mut Entry<K, V> {
         assert!(
             index < self.entries.capacity(),
@@ -228,28 +138,38 @@ where
     }
 
     #[inline]
-    pub fn set_entry(&mut self, index: usize, value: Entry<K, V>) {
-        if self.needs_to_grow() {
-            self.entries.grow(None);
-        }
-
-        assert!(
-            index < self.entries.capacity(),
-            "index out of bounds on buckets array"
-        );
-
-        unsafe { self.entries.as_ptr().add(index).write(value) };
-    }
-
-    pub(crate) fn needs_to_grow(&self) -> bool {
+    fn needs_to_grow(&self) -> bool {
         self.len + 1 > (self.entries.capacity() as f32 * MAX_LOAD) as usize
     }
 }
 
 #[derive(Debug)]
+pub struct OccupiedEntry<K, V> {
+    key: K,
+    value: V,
+}
+
+impl<K, V> OccupiedEntry<K, V> {
+    pub fn key(&self) -> &K {
+        &self.key
+    }
+
+    pub fn value(&self) -> &V {
+        &self.value
+    }
+
+    pub fn set_value(&mut self, value: V) {
+        self.value = value;
+    }
+}
+
+#[derive(Debug)]
+pub struct VacantEntry;
+
+#[derive(Debug)]
 pub enum Entry<K, V> {
-    Vacant,
-    Occupied { key: K, value: V },
+    Vacant(VacantEntry),
+    Occupied(OccupiedEntry<K, V>),
 }
 
 impl<K, V> Default for HashMap<K, V>
@@ -264,36 +184,47 @@ where
 }
 
 impl<K, V> Entry<K, V> {
-    fn new(key: K, value: V) -> Entry<K, V> {
-        Self::Occupied { key, value }
+    fn occupied(key: K, value: V) -> Entry<K, V> {
+        Self::Occupied(OccupiedEntry { key, value })
     }
 
-    /// Returns `true` if the entry is [`Vacant`].
-    ///
-    /// [`Vacant`]: Entry::Vacant
-    #[must_use]
+    #[inline]
     pub fn is_vacant(&self) -> bool {
-        matches!(self, Self::Vacant)
+        matches!(self, Self::Vacant(_))
     }
 
-    /// Returns `true` if the entry is [`Occupied`].
-    ///
-    /// [`Occupied`]: Entry::Occupied
-    #[must_use]
+    #[inline]
     pub fn is_occupied(&self) -> bool {
         matches!(self, Self::Occupied { .. })
+    }
+
+    #[inline]
+    pub fn as_occupied(&self) -> Option<&OccupiedEntry<K, V>> {
+        if let Self::Occupied(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn as_occupied_mut(&mut self) -> Option<&mut OccupiedEntry<K, V>> {
+        if let Self::Occupied(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 }
 
 impl<K, V> Default for Entry<K, V> {
     fn default() -> Self {
-        Self::Vacant
+        Self::Vacant(VacantEntry)
     }
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     #[allow(dead_code)]
@@ -302,22 +233,29 @@ mod tests {
         bar: usize,
     }
 
+    impl Drop for Foo {
+        fn drop(&mut self) {}
+    }
+
     #[test]
     fn test_set_empty() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
         assert_eq!(true, map.is_empty());
-        map.set("1", Foo { bar: 2 });
+        let result = map.set("1", Foo { bar: 2 });
         assert_eq!(Some(&Foo { bar: 2 }), map.get("1"));
         assert_eq!(1, map.len());
+        assert_eq!(true, result);
     }
 
     #[test]
     fn test_set_non_empty_same_key() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
-        map.set("1", Foo { bar: 1 });
-        map.set("1", Foo { bar: 2 });
+        let result1 = map.set("1", Foo { bar: 1 });
+        let result2 = map.set("1", Foo { bar: 2 });
         assert_eq!(Some(&Foo { bar: 2 }), map.get("1"));
         assert_eq!(1, map.len());
+        assert_eq!(true, result1);
+        assert_eq!(false, result2);
     }
 
     #[test]
