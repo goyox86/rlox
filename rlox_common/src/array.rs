@@ -1,6 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    ptr, slice,
+    ptr,
 };
 
 use crate::raw_array::RawArray;

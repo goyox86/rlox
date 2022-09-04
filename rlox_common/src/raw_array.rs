@@ -1,5 +1,5 @@
 use std::{
-    alloc::{alloc, alloc_zeroed, dealloc, Layout},
+    alloc::{alloc_zeroed, dealloc, Layout},
     marker::PhantomData,
     ptr::{self, NonNull},
     slice,
