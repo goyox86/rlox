@@ -2,6 +2,7 @@ use std::{
     alloc::{alloc, alloc_zeroed, dealloc, Layout},
     marker::PhantomData,
     ptr::{self, NonNull},
+    slice,
 };
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -34,8 +35,18 @@ impl<T> RawArray<T> {
     }
 
     #[inline]
-    pub fn as_mut_ptr(&self) -> *mut T {
+    pub fn as_mut_ptr(&mut self) -> *mut T {
         self.ptr.as_ptr()
+    }
+
+    #[inline]
+    pub fn as_slice(&self) -> &[T] {
+        unsafe { slice::from_raw_parts(self.ptr.as_ptr() as *const T, self.capacity) }
+    }
+
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { slice::from_raw_parts_mut(self.ptr.as_ptr() as *mut T, self.capacity) }
     }
 
     #[inline]
@@ -55,6 +66,26 @@ impl<T> RawArray<T> {
         } else {
             self.capacity * 2
         }
+    }
+
+    #[inline]
+    pub fn get(&self, index: usize) -> &T {
+        assert!(
+            index < self.capacity,
+            "index out of bounds on buckets array"
+        );
+
+        unsafe { &*self.ptr.as_ptr().add(index) }
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self, index: usize) -> &mut T {
+        assert!(
+            index < self.capacity,
+            "index out of bounds on buckets array"
+        );
+
+        unsafe { &mut *self.as_ptr().add(index) }
     }
 
     pub fn grow(&mut self, capacity: Option<usize>) {

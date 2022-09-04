@@ -121,13 +121,13 @@ impl<T> Deref for Array<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { slice::from_raw_parts(self.buf.as_ptr() as *const T, self.buf.capacity()) }
+        self.buf.as_slice()
     }
 }
 
 impl<T> DerefMut for Array<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { slice::from_raw_parts_mut(self.buf.as_ptr() as *mut T, self.buf.capacity()) }
+        self.buf.as_mut_slice()
     }
 }
 

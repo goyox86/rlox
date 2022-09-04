@@ -3,84 +3,35 @@ use std::{borrow::Borrow, collections::hash_map::DefaultHasher, hash::Hash, hash
 use crate::raw_array::RawArray;
 
 const MAX_LOAD: f32 = 0.75;
+
 #[derive(Debug)]
-pub struct HashMap<K, V>
+pub struct HashMapInner<K, V>
 where
     K: PartialEq + Eq + Hash,
 {
-    entries: RawArray<Entry<K, V>>,
-    len: usize,
+    pub entries: RawArray<Entry<K, V>>,
 }
 
 #[allow(dead_code)]
-impl<K, V> HashMap<K, V>
+impl<K, V> HashMapInner<K, V>
 where
     K: Eq + Hash,
 {
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn set(&mut self, key: K, value: V) -> bool {
-        if self.needs_to_grow() {
-            self.entries.grow(None);
-        }
-
-        let entry = self.find_entry(&key);
-        if entry.is_vacant() {
-            *entry = Entry::Occupied(OccupiedEntry { key, value });
-            self.len += 1;
-            true
-        } else {
-            let occupied_entry = entry
-                .as_occupied_mut()
-                .expect("entry at this pount must be occupied");
-            let already_exists = occupied_entry.key() == key.borrow();
-            if already_exists {
-                occupied_entry.set_value(value);
-                false
-            } else {
-                *entry = Entry::occupied(key, value);
-                self.len += 1;
-                true
-            }
+        Self {
+            entries: RawArray::new(),
         }
     }
 
-    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        if self.is_empty() {
-            return None;
-        }
-
-        match self.find_entry(key) {
-            Entry::Vacant(_) => None,
-            Entry::Occupied(entry) => {
-                if <dyn Borrow<Q>>::borrow(entry.key()) == key {
-                    Some(entry.value())
-                } else {
-                    None
-                }
-            }
-        }
+    pub fn with_capacity(capacity: usize) -> Self {
+        let mut me = Self::new();
+        me.entries.grow(Some(capacity));
+        me
     }
 
     #[inline]
     pub fn capacity(&self) -> usize {
         self.entries.capacity()
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
     }
 
     pub fn find_entry<Q: ?Sized>(&self, key: &Q) -> &mut Entry<K, V>
@@ -89,19 +40,31 @@ where
         Q: Hash + Eq,
     {
         let mut index = self.index(key.borrow());
+        let mut tombstone: Option<&mut Entry<K, V>> = None;
 
         loop {
-            let entry = self.get_entry(index);
+            let entry = self.get_entry_mut(index);
             match entry {
-                Entry::Vacant(_) => break self.get_entry_mut(index),
+                Entry::Vacant(_) => {
+                    return if tombstone.is_some() {
+                        tombstone.unwrap()
+                    } else {
+                        self.get_entry_mut(index)
+                    }
+                }
+                Entry::Tombstone => {
+                    if tombstone.is_none() {
+                        tombstone = Some(entry);
+                    }
+                }
                 Entry::Occupied(entry) => {
                     if entry.key().borrow() == key {
-                        break self.get_entry_mut(index);
-                    } else {
-                        index = (index + 1) % self.capacity();
+                        return self.get_entry_mut(index);
                     }
                 }
             }
+
+            index = (index + 1) % self.capacity();
         }
     }
 
@@ -121,7 +84,9 @@ where
     fn get_entry(&self, index: usize) -> &Entry<K, V> {
         assert!(
             index < self.entries.capacity(),
-            "index out of bounds on buckets array"
+            "index out of bounds: index is: {} but array capacity is: {}",
+            index,
+            self.capacity()
         );
 
         unsafe { &*self.entries.as_ptr().add(index) }
@@ -131,15 +96,152 @@ where
     fn get_entry_mut(&self, index: usize) -> &mut Entry<K, V> {
         assert!(
             index < self.entries.capacity(),
-            "index out of bounds on buckets array"
+            "index out of bounds: index is: {} but array capacity is: {}",
+            index,
+            self.capacity()
         );
 
         unsafe { &mut *self.entries.as_ptr().add(index) }
     }
 
+    pub fn grow(&mut self) {
+        self.entries.grow(None);
+    }
+}
+
+#[derive(Debug)]
+pub struct HashMap<K, V>
+where
+    K: PartialEq + Eq + Hash,
+{
+    inner: HashMapInner<K, V>,
+    len: usize,
+}
+
+#[allow(dead_code)]
+impl<K, V> HashMap<K, V>
+where
+    K: Eq + Hash + std::fmt::Debug,
+    V: std::fmt::Debug,
+{
+    pub fn new() -> Self {
+        Self {
+            inner: HashMapInner::new(),
+            len: 0,
+        }
+    }
+
+    pub fn set(&mut self, key: K, value: V) -> bool {
+        if self.needs_to_grow() {
+            self.grow()
+        }
+
+        let entry = self.inner.find_entry(&key);
+
+        match entry {
+            Entry::Vacant(_) => {
+                *entry = Entry::Occupied(OccupiedEntry { key, value });
+                self.len += 1;
+                true
+            }
+            Entry::Tombstone => {
+                *entry = Entry::Occupied(OccupiedEntry { key, value });
+                true
+            }
+            Entry::Occupied(occupied_entry) => {
+                let already_exists = occupied_entry.key() == key.borrow();
+                if already_exists {
+                    occupied_entry.set_value(value);
+                    false
+                } else {
+                    *entry = Entry::occupied(key, value);
+                    self.len += 1;
+                    true
+                }
+            }
+        }
+    }
+
+    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        if self.is_empty() {
+            return None;
+        }
+
+        match self.inner.find_entry(key) {
+            Entry::Vacant(_) => None,
+            Entry::Occupied(entry) => {
+                if <dyn Borrow<Q>>::borrow(entry.key()) == key {
+                    Some(entry.value())
+                } else {
+                    None
+                }
+            }
+            Entry::Tombstone => None,
+        }
+    }
+
+    pub fn delete(&mut self, key: K) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+
+        let entry = self.inner.find_entry(&key);
+        if entry.is_vacant() || entry.is_tombstone() {
+            return false;
+        }
+
+        *entry = Entry::Tombstone;
+        self.len -= 1;
+
+        true
+    }
+
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     #[inline]
     fn needs_to_grow(&self) -> bool {
-        self.len + 1 > (self.entries.capacity() as f32 * MAX_LOAD) as usize
+        self.len + 1 > (self.capacity() as f32 * MAX_LOAD) as usize
+    }
+
+    #[inline]
+    fn grow(&mut self) {
+        if self.is_empty() {
+            self.inner.entries.grow(None);
+            return;
+        }
+
+        let mut new_inner: HashMapInner<K, V> = HashMapInner::with_capacity(self.capacity() * 2);
+        let mut new_len = 0;
+        for entry in self.inner.entries.as_slice() {
+            match entry {
+                Entry::Vacant(_) | Entry::Tombstone => continue,
+                Entry::Occupied(occupied_entry) => {
+                    let dest = new_inner.find_entry(occupied_entry.key());
+                    *dest = unsafe { std::ptr::read(entry) };
+                    new_len += 1;
+                }
+            }
+        }
+
+        std::mem::swap(&mut self.inner, &mut new_inner);
+        self.len = new_len;
     }
 }
 
@@ -170,17 +272,7 @@ pub struct VacantEntry;
 pub enum Entry<K, V> {
     Vacant(VacantEntry),
     Occupied(OccupiedEntry<K, V>),
-}
-
-impl<K, V> Default for HashMap<K, V>
-where
-    K: PartialEq + Eq + Hash,
-{
-    fn default() -> Self {
-        let entries: RawArray<Entry<K, V>> = RawArray::new();
-
-        Self { entries, len: 0 }
-    }
+    Tombstone,
 }
 
 impl<K, V> Entry<K, V> {
@@ -214,6 +306,14 @@ impl<K, V> Entry<K, V> {
         } else {
             None
         }
+    }
+
+    pub fn is_tombstone(&self) -> bool {
+        matches!(self, Self::Tombstone)
+    }
+
+    pub fn make_vacant(&mut self) {
+        *self = Self::Vacant(VacantEntry);
     }
 }
 
@@ -273,12 +373,56 @@ mod tests {
         use rand::prelude::*;
 
         let mut map: HashMap<usize, Foo> = HashMap::new();
-        for _ in 0..10_000 {
+        for _ in 0..100 {
             let key: usize = random();
             map.set(key, Foo { bar: 1 });
             assert_eq!(Some(&Foo { bar: 1 }), map.get(&key));
         }
 
-        assert_eq!(10_000, 10_000);
+        assert_eq!(100, map.len());
+    }
+
+    #[test]
+    fn test_delete_empty() {
+        let mut map: HashMap<&str, Foo> = HashMap::new();
+        assert_eq!(true, map.is_empty());
+        assert_eq!(map.delete("1"), false);
+    }
+
+    #[test]
+    fn test_delete_non_empty_existing() {
+        let mut map: HashMap<&str, Foo> = HashMap::new();
+        map.set("1", Foo { bar: 1 });
+        assert_eq!(map.delete("1"), true);
+        assert_eq!(map.get("1"), None);
+    }
+
+    #[test]
+    fn test_delete_non_empty_non_existing() {
+        let mut map: HashMap<&str, Foo> = HashMap::new();
+        map.set("1", Foo { bar: 1 });
+        map.set("2", Foo { bar: 2 });
+        assert_eq!(map.delete("0"), false);
+        assert_eq!(Some(&Foo { bar: 1 }), map.get("1"));
+        assert_eq!(Some(&Foo { bar: 2 }), map.get("2"));
+    }
+
+    #[test]
+    fn test_delete_non_empty_many() {
+        use rand::prelude::*;
+        let mut keys: Vec<usize> = Vec::new();
+        let mut map: HashMap<usize, Foo> = HashMap::new();
+        for _ in 0..10 {
+            let key: usize = random();
+            keys.push(key);
+            map.set(key, Foo { bar: 1 });
+            assert_eq!(Some(&Foo { bar: 1 }), map.get(&key));
+        }
+
+        for key in &keys {
+            map.delete(*key);
+        }
+
+        assert_eq!(0, map.len());
     }
 }

@@ -32,6 +32,11 @@ struct Args {
     file_path: Option<PathBuf>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct Foo {
+    bar: usize,
+}
+
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
     let vm_opts = vm::VmOptions {

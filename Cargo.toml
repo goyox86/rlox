@@ -17,6 +17,7 @@ strum = { version = "0.24", features = ["derive"] }
 strum_macros = "0.24"
 rustc-hash = "1.1.0"
 rlox_common = { path = "rlox_common" }
+rand = "0.8.5"
 
 [profile.release]
 debug = true
