@@ -1,6 +1,4 @@
-use std::{
-    borrow::Borrow, collections::hash_map::DefaultHasher, hash::Hash, hash::Hasher, ptr::write,
-};
+use std::{borrow::Borrow, collections::hash_map::DefaultHasher, hash::Hash, hash::Hasher, ptr};
 
 use crate::raw_array::RawArray;
 
@@ -188,7 +186,7 @@ where
             Entry::Vacant => None,
             Entry::Occupied(entry) => {
                 if entry.key.borrow() == key {
-                    Some(entry.value())
+                    Some(&entry.value)
                 } else {
                     None
                 }
@@ -207,7 +205,7 @@ where
             return false;
         }
 
-        unsafe { write(entry, Entry::Tombstone) };
+        *entry = Entry::Tombstone;
         self.len -= 1;
 
         true
@@ -291,20 +289,22 @@ where
             return None;
         }
 
+        let mut result = None;
+
         for entry in self.map.inner.entries.as_slice()[self.at..].iter() {
+            self.at += 1;
             match entry {
                 Entry::Vacant | Entry::Tombstone => {
-                    self.at += 1;
                     continue;
                 }
                 Entry::Occupied(occupied_entry) => {
-                    self.at += 1;
-                    return Some((occupied_entry.key(), occupied_entry.value()));
+                    result = Some((occupied_entry.key(), occupied_entry.value()));
+                    break;
                 }
             }
         }
 
-        None
+        result
     }
 }
 
@@ -323,25 +323,22 @@ where
     type Item = (&'a K, &'a mut V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.at == self.map.capacity() - 1 {
-            return None;
-        }
+        loop {
+            let entry = self.map.inner.get_entry_mut(self.at).as_occupied_mut();
+            self.at += 1;
 
-        for entry in self.map.inner.entries.as_mut_slice()[self.at..].iter_mut() {
             match entry {
-                Entry::Vacant | Entry::Tombstone => {
-                    self.at += 1;
-                    continue;
-                }
-                Entry::Occupied(occupied_entry) => {
+                Some(occupied_entry) => unsafe {
                     let occupied_entry = occupied_entry.as_ptr();
-                    self.at += 1;
-                    return unsafe { Some((&(*occupied_entry).key, &mut (*occupied_entry).value)) };
+                    break Some((&(*occupied_entry).key, &mut (*occupied_entry).value));
+                },
+                None => {
+                    if self.at == self.map.capacity() {
+                        break None;
+                    }
                 }
             }
         }
-
-        None
     }
 }
 
@@ -363,8 +360,10 @@ where
     K: Hash + Eq,
 {
     fn drop(&mut self) {
-        for i in 0..self.len {
-            let _ = self.inner.entries.remove(i);
+        for index in 0..self.capacity() {
+            unsafe {
+                let _ = ptr::read(self.inner.entries.get(index));
+            }
         }
     }
 }
@@ -383,18 +382,22 @@ where
         Self { key, value }
     }
 
+    #[inline]
     pub fn key(&self) -> &K {
         &self.key
     }
 
+    #[inline]
     pub fn value(&self) -> &V {
         &self.value
     }
 
+    #[inline]
     pub fn value_mut(&mut self) -> &mut V {
         &mut self.value
     }
 
+    #[inline]
     pub fn set_value(&mut self, value: V) {
         self.value = value;
     }
@@ -450,8 +453,9 @@ where
         }
     }
 
+    #[inline]
     pub fn occupy(&mut self, occupied_entry: OccupiedEntry<K, V>) {
-        unsafe { std::ptr::write(self, Self::Occupied(occupied_entry)) };
+        *self = Self::Occupied(occupied_entry);
     }
 }
 
@@ -594,19 +598,28 @@ mod tests {
 
     #[test]
     fn test_iter_mut() {
-        let mut map: HashMap<usize, Foo> = HashMap::new();
-        let (mut foo0, mut foo1, mut foo2) = (Foo::new(0), Foo::new(1), Foo::new(2));
-        map.set(2, foo2.clone());
-        map.set(1, foo1.clone());
-        map.set(0, foo0.clone());
+        let mut map: HashMap<usize, String> = HashMap::new();
+        map.set(2, "Hello".into());
+        map.set(1, "darkness".into());
+        map.set(0, "into".to_string());
 
-        let mut entries: Vec<(&usize, &mut Foo)> = vec![];
-        for entry in map.iter_mut() {
-            entries.push(entry);
+        for (key, value) in map.iter_mut() {
+            if *key == 2 {
+                *value = "I've come to talk with you again".to_string();
+            }
+            if *key == 1 {
+                *value = "Because a vision".to_string();
+            }
+            if *key == 0 {
+                *value = "softly creeping".to_string();
+            }
         }
 
-        let expected_entries = vec![(&0, &mut foo0), (&1, &mut foo1), (&2, &mut foo2)];
-        entries.sort();
-        assert_eq!(expected_entries, entries);
+        assert_eq!(
+            Some(&"I've come to talk with you again".into()),
+            map.get(&2)
+        );
+        assert_eq!(Some(&"Because a vision".into()), map.get(&1));
+        assert_eq!(Some(&"softly creeping".into()), map.get(&0));
     }
 }

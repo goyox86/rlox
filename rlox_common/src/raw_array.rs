@@ -124,6 +124,14 @@ impl<T> RawArray<T> {
             }
         }
     }
+
+    #[inline]
+    pub fn remove(&mut self, index: usize) -> Option<T> {
+        unsafe {
+            let value: T = ptr::read(self.as_ptr().add(index));
+            Some(value)
+        }
+    }
 }
 
 impl<T> Default for RawArray<T> {
@@ -155,10 +163,5 @@ mod tests {
     struct Foo {
         bar: usize,
         baz: String,
-    }
-
-    #[test]
-    fn test_init() {
-        let array: RawArray<Foo> = RawArray::new();
     }
 }
