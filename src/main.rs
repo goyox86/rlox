@@ -32,9 +32,21 @@ struct Args {
     file_path: Option<PathBuf>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Foo {
     bar: usize,
+}
+
+impl Foo {
+    pub fn new(bar: usize) -> Self {
+        Self { bar }
+    }
+}
+
+impl Drop for Foo {
+    fn drop(&mut self) {
+        println!("Drop called!");
+    }
 }
 
 fn main() -> std::io::Result<()> {

@@ -5,7 +5,7 @@ use std::{
     slice,
 };
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RawArray<T> {
     capacity: usize,
     ptr: NonNull<T>,
@@ -72,7 +72,9 @@ impl<T> RawArray<T> {
     pub fn get(&self, index: usize) -> &T {
         assert!(
             index < self.capacity,
-            "index out of bounds on buckets array"
+            "index out of bounds: index is: {} but array capacity is: {}",
+            index,
+            self.capacity
         );
 
         unsafe { &*self.ptr.as_ptr().add(index) }
@@ -82,17 +84,29 @@ impl<T> RawArray<T> {
     pub fn get_mut(&mut self, index: usize) -> &mut T {
         assert!(
             index < self.capacity,
-            "index out of bounds on buckets array"
+            "index out of bounds: index is: {} but array capacity is: {}",
+            index,
+            self.capacity
         );
 
         unsafe { &mut *self.as_ptr().add(index) }
     }
 
-    pub fn grow(&mut self, capacity: Option<usize>) {
+    pub fn grow(&mut self, new_capacity: Option<usize>) {
+        if self.capacity == 0 {
+            self.capacity = new_capacity.unwrap_or_else(|| self.grow_capacity());
+            let new_layout = self.layout_for(self.capacity);
+            unsafe {
+                let new_ptr = alloc_zeroed(new_layout);
+                self.ptr = NonNull::new_unchecked(new_ptr.cast())
+            }
+            return;
+        }
+
         let old_ptr = self.ptr;
         let old_layout = self.layout_for(self.capacity);
         let old_capacity = self.capacity;
-        self.capacity = capacity.unwrap_or(self.grow_capacity());
+        self.capacity = new_capacity.unwrap_or_else(|| self.grow_capacity());
         let new_layout = self.layout_for(self.capacity);
 
         unsafe {
@@ -118,6 +132,7 @@ impl<T> Default for RawArray<T> {
         Self::new()
     }
 }
+
 impl<T> Drop for RawArray<T> {
     fn drop(&mut self) {
         if self.capacity != 0 {

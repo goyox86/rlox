@@ -1,10 +1,12 @@
-use std::{borrow::Borrow, collections::hash_map::DefaultHasher, hash::Hash, hash::Hasher};
+use std::{
+    borrow::Borrow, collections::hash_map::DefaultHasher, hash::Hash, hash::Hasher, ptr::write,
+};
 
 use crate::raw_array::RawArray;
 
 const MAX_LOAD: f32 = 0.75;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct HashMapInner<K, V>
 where
     K: PartialEq + Eq + Hash,
@@ -34,32 +36,33 @@ where
         self.entries.capacity()
     }
 
-    pub fn find_entry<Q: ?Sized>(&self, key: &Q) -> &mut Entry<K, V>
+    #[inline]
+    pub fn find_entry_index<Q: ?Sized>(&self, key: &Q) -> usize
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
     {
-        let mut index = self.index(key.borrow());
-        let mut tombstone: Option<&mut Entry<K, V>> = None;
+        let hash = self.hash(key.borrow());
+        let mut index = (hash % self.capacity() as u64) as usize;
+        let mut tombstone: Option<usize> = None;
 
         loop {
-            let entry = self.get_entry_mut(index);
+            let entry = self.get_entry(index);
             match entry {
-                Entry::Vacant(_) => {
-                    return if tombstone.is_some() {
-                        tombstone.unwrap()
-                    } else {
-                        self.get_entry_mut(index)
-                    }
+                Entry::Vacant => {
+                    break match tombstone {
+                        Some(tombstone_index) => tombstone_index,
+                        None => index,
+                    };
                 }
                 Entry::Tombstone => {
                     if tombstone.is_none() {
-                        tombstone = Some(entry);
+                        tombstone = Some(index);
                     }
                 }
                 Entry::Occupied(entry) => {
                     if entry.key().borrow() == key {
-                        return self.get_entry_mut(index);
+                        break index;
                     }
                 }
             }
@@ -69,43 +72,49 @@ where
     }
 
     #[inline]
-    fn index<Q: ?Sized>(&self, key: &Q) -> usize
+    pub fn find_entry<Q: ?Sized>(&self, key: &Q) -> &Entry<K, V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        let index = self.find_entry_index(key);
+        self.get_entry(index)
+    }
+
+    #[inline]
+    pub fn find_entry_mut<Q: ?Sized>(&mut self, key: &Q) -> &mut Entry<K, V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        let index = self.find_entry_index(key);
+        self.get_entry_mut(index)
+    }
+
+    /// # Safety: [`entries.get`] is checking bounds.
+    #[inline]
+    fn get_entry(&self, index: usize) -> &Entry<K, V> {
+        self.entries.get(index)
+    }
+
+    /// # Safety: [`entries.get_mut`] is checking bounds.
+    #[inline]
+    fn get_entry_mut<'a>(&'a mut self, index: usize) -> &'a mut Entry<K, V> {
+        self.entries.get_mut(index)
+    }
+
+    pub fn grow(&mut self, new_capacity: Option<usize>) {
+        self.entries.grow(new_capacity);
+    }
+
+    fn hash<Q: ?Sized>(&self, key: &Q) -> u64
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
     {
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
-        let hash = hasher.finish();
-        (hash % self.capacity() as u64) as usize
-    }
-
-    #[inline]
-    fn get_entry(&self, index: usize) -> &Entry<K, V> {
-        assert!(
-            index < self.entries.capacity(),
-            "index out of bounds: index is: {} but array capacity is: {}",
-            index,
-            self.capacity()
-        );
-
-        unsafe { &*self.entries.as_ptr().add(index) }
-    }
-
-    #[inline]
-    fn get_entry_mut(&self, index: usize) -> &mut Entry<K, V> {
-        assert!(
-            index < self.entries.capacity(),
-            "index out of bounds: index is: {} but array capacity is: {}",
-            index,
-            self.capacity()
-        );
-
-        unsafe { &mut *self.entries.as_ptr().add(index) }
-    }
-
-    pub fn grow(&mut self) {
-        self.entries.grow(None);
+        hasher.finish()
     }
 }
 
@@ -121,8 +130,7 @@ where
 #[allow(dead_code)]
 impl<K, V> HashMap<K, V>
 where
-    K: Eq + Hash + std::fmt::Debug,
-    V: std::fmt::Debug,
+    K: Eq + Hash,
 {
     pub fn new() -> Self {
         Self {
@@ -136,16 +144,17 @@ where
             self.grow()
         }
 
-        let entry = self.inner.find_entry(&key);
+        let index = self.inner.find_entry_index(&key);
+        let entry = self.inner.get_entry_mut(index);
 
         match entry {
-            Entry::Vacant(_) => {
-                *entry = Entry::Occupied(OccupiedEntry { key, value });
+            Entry::Vacant => {
+                entry.occupy(OccupiedEntry::new(key, value));
                 self.len += 1;
                 true
             }
             Entry::Tombstone => {
-                *entry = Entry::Occupied(OccupiedEntry { key, value });
+                entry.occupy(OccupiedEntry::new(key, value));
                 true
             }
             Entry::Occupied(occupied_entry) => {
@@ -154,12 +163,16 @@ where
                     occupied_entry.set_value(value);
                     false
                 } else {
-                    *entry = Entry::occupied(key, value);
+                    entry.occupy(OccupiedEntry::new(key, value));
                     self.len += 1;
                     true
                 }
             }
         }
+    }
+
+    pub fn insert(&mut self, key: K, value: V) -> bool {
+        self.set(key, value)
     }
 
     pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
@@ -172,9 +185,9 @@ where
         }
 
         match self.inner.find_entry(key) {
-            Entry::Vacant(_) => None,
+            Entry::Vacant => None,
             Entry::Occupied(entry) => {
-                if <dyn Borrow<Q>>::borrow(entry.key()) == key {
+                if entry.key.borrow() == key {
                     Some(entry.value())
                 } else {
                     None
@@ -189,15 +202,19 @@ where
             return false;
         }
 
-        let entry = self.inner.find_entry(&key);
+        let entry = self.inner.find_entry_mut(&key);
         if entry.is_vacant() || entry.is_tombstone() {
             return false;
         }
 
-        *entry = Entry::Tombstone;
+        unsafe { write(entry, Entry::Tombstone) };
         self.len -= 1;
 
         true
+    }
+
+    pub fn remove(&mut self, key: K) -> bool {
+        self.delete(key)
     }
 
     #[inline]
@@ -215,6 +232,14 @@ where
         self.len == 0
     }
 
+    pub fn iter(&'_ self) -> Iter<'_, K, V> {
+        Iter { map: self, at: 0 }
+    }
+
+    pub fn iter_mut(&'_ mut self) -> IterMut<'_, K, V> {
+        IterMut { map: self, at: 0 }
+    }
+
     #[inline]
     fn needs_to_grow(&self) -> bool {
         self.len + 1 > (self.capacity() as f32 * MAX_LOAD) as usize
@@ -222,8 +247,9 @@ where
 
     #[inline]
     fn grow(&mut self) {
-        if self.is_empty() {
-            self.inner.entries.grow(None);
+        if self.capacity() == 0 {
+            // Capacity by default for an empty RawArray is 8 elements.
+            self.inner.grow(None);
             return;
         }
 
@@ -231,10 +257,11 @@ where
         let mut new_len = 0;
         for entry in self.inner.entries.as_slice() {
             match entry {
-                Entry::Vacant(_) | Entry::Tombstone => continue,
+                Entry::Vacant | Entry::Tombstone => continue,
                 Entry::Occupied(occupied_entry) => {
-                    let dest = new_inner.find_entry(occupied_entry.key());
-                    *dest = unsafe { std::ptr::read(entry) };
+                    let index = new_inner.find_entry_index(occupied_entry.key());
+                    let dest = new_inner.get_entry_mut(index);
+                    unsafe { std::ptr::write(dest, std::ptr::read(entry)) };
                     new_len += 1;
                 }
             }
@@ -245,13 +272,117 @@ where
     }
 }
 
+pub struct Iter<'a, K, V>
+where
+    K: Hash + Eq,
+{
+    map: &'a HashMap<K, V>,
+    at: usize,
+}
+
+impl<'a, K, V> Iterator for Iter<'a, K, V>
+where
+    K: Hash + Eq,
+{
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.at == self.map.capacity() - 1 {
+            return None;
+        }
+
+        for entry in self.map.inner.entries.as_slice()[self.at..].iter() {
+            match entry {
+                Entry::Vacant | Entry::Tombstone => {
+                    self.at += 1;
+                    continue;
+                }
+                Entry::Occupied(occupied_entry) => {
+                    self.at += 1;
+                    return Some((occupied_entry.key(), occupied_entry.value()));
+                }
+            }
+        }
+
+        None
+    }
+}
+
+pub struct IterMut<'a, K, V>
+where
+    K: Hash + Eq,
+{
+    map: &'a mut HashMap<K, V>,
+    at: usize,
+}
+
+impl<'a, K, V: 'a> Iterator for IterMut<'a, K, V>
+where
+    K: Hash + Eq,
+{
+    type Item = (&'a K, &'a mut V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.at == self.map.capacity() - 1 {
+            return None;
+        }
+
+        for entry in self.map.inner.entries.as_mut_slice()[self.at..].iter_mut() {
+            match entry {
+                Entry::Vacant | Entry::Tombstone => {
+                    self.at += 1;
+                    continue;
+                }
+                Entry::Occupied(occupied_entry) => {
+                    let occupied_entry = occupied_entry.as_ptr();
+                    self.at += 1;
+                    return unsafe { Some((&(*occupied_entry).key, &mut (*occupied_entry).value)) };
+                }
+            }
+        }
+
+        None
+    }
+}
+
+impl<K, V> Default for HashMap<K, V>
+where
+    K: Hash + Eq + Default,
+    V: Default,
+{
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+            len: Default::default(),
+        }
+    }
+}
+
+impl<K, V> Drop for HashMap<K, V>
+where
+    K: Hash + Eq,
+{
+    fn drop(&mut self) {
+        for i in 0..self.len {
+            let _ = self.inner.entries.remove(i);
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct OccupiedEntry<K, V> {
+pub struct OccupiedEntry<K: Hash + Eq, V> {
     key: K,
     value: V,
 }
 
-impl<K, V> OccupiedEntry<K, V> {
+impl<K, V> OccupiedEntry<K, V>
+where
+    K: Hash + Eq,
+{
+    pub fn new(key: K, value: V) -> Self {
+        Self { key, value }
+    }
+
     pub fn key(&self) -> &K {
         &self.key
     }
@@ -260,34 +391,45 @@ impl<K, V> OccupiedEntry<K, V> {
         &self.value
     }
 
+    pub fn value_mut(&mut self) -> &mut V {
+        &mut self.value
+    }
+
     pub fn set_value(&mut self, value: V) {
         self.value = value;
+    }
+
+    pub fn as_ptr(&mut self) -> *mut Self {
+        self as *mut Self
     }
 }
 
 #[derive(Debug)]
-pub struct VacantEntry;
-
-#[derive(Debug)]
-pub enum Entry<K, V> {
-    Vacant(VacantEntry),
+pub enum Entry<K, V>
+where
+    K: Hash + Eq,
+{
+    Vacant,
     Occupied(OccupiedEntry<K, V>),
     Tombstone,
 }
 
-impl<K, V> Entry<K, V> {
-    fn occupied(key: K, value: V) -> Entry<K, V> {
-        Self::Occupied(OccupiedEntry { key, value })
-    }
-
+impl<K, V> Entry<K, V>
+where
+    K: Hash + Eq,
+{
     #[inline]
     pub fn is_vacant(&self) -> bool {
-        matches!(self, Self::Vacant(_))
+        matches!(self, Self::Vacant)
     }
 
     #[inline]
     pub fn is_occupied(&self) -> bool {
         matches!(self, Self::Occupied { .. })
+    }
+
+    pub fn is_tombstone(&self) -> bool {
+        matches!(self, Self::Tombstone)
     }
 
     #[inline]
@@ -308,18 +450,17 @@ impl<K, V> Entry<K, V> {
         }
     }
 
-    pub fn is_tombstone(&self) -> bool {
-        matches!(self, Self::Tombstone)
-    }
-
-    pub fn make_vacant(&mut self) {
-        *self = Self::Vacant(VacantEntry);
+    pub fn occupy(&mut self, occupied_entry: OccupiedEntry<K, V>) {
+        unsafe { std::ptr::write(self, Self::Occupied(occupied_entry)) };
     }
 }
 
-impl<K, V> Default for Entry<K, V> {
+impl<K, V> Default for Entry<K, V>
+where
+    K: Hash + Eq,
+{
     fn default() -> Self {
-        Self::Vacant(VacantEntry)
+        Self::Vacant
     }
 }
 
@@ -328,9 +469,15 @@ mod tests {
     use super::*;
 
     #[allow(dead_code)]
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     struct Foo {
         bar: usize,
+    }
+
+    impl Foo {
+        pub fn new(bar: usize) -> Self {
+            Self { bar }
+        }
     }
 
     impl Drop for Foo {
@@ -412,7 +559,7 @@ mod tests {
         use rand::prelude::*;
         let mut keys: Vec<usize> = Vec::new();
         let mut map: HashMap<usize, Foo> = HashMap::new();
-        for _ in 0..10 {
+        for _ in 0..1000 {
             let key: usize = random();
             keys.push(key);
             map.set(key, Foo { bar: 1 });
@@ -424,5 +571,42 @@ mod tests {
         }
 
         assert_eq!(0, map.len());
+    }
+
+    #[test]
+    fn test_iter() {
+        let mut map: HashMap<usize, Foo> = HashMap::new();
+        let (foo0, foo1, foo2) = (Foo::new(0), Foo::new(1), Foo::new(2));
+        map.set(2, foo2.clone());
+        map.set(1, foo1.clone());
+        map.set(0, foo0.clone());
+
+        let mut entries: Vec<(&usize, &Foo)> = vec![];
+        for entry in map.iter() {
+            dbg!(entry);
+            entries.push(entry);
+        }
+
+        let expected_entries = vec![(&0, &foo0), (&1, &foo1), (&2, &foo2)];
+        entries.sort();
+        assert_eq!(expected_entries, entries);
+    }
+
+    #[test]
+    fn test_iter_mut() {
+        let mut map: HashMap<usize, Foo> = HashMap::new();
+        let (mut foo0, mut foo1, mut foo2) = (Foo::new(0), Foo::new(1), Foo::new(2));
+        map.set(2, foo2.clone());
+        map.set(1, foo1.clone());
+        map.set(0, foo0.clone());
+
+        let mut entries: Vec<(&usize, &mut Foo)> = vec![];
+        for entry in map.iter_mut() {
+            entries.push(entry);
+        }
+
+        let expected_entries = vec![(&0, &mut foo0), (&1, &mut foo1), (&2, &mut foo2)];
+        entries.sort();
+        assert_eq!(expected_entries, entries);
     }
 }

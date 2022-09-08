@@ -136,7 +136,7 @@ impl<'source> Scanner<'source> {
     }
 
     pub fn is_at_end(&mut self) -> bool {
-        self.chars.clone().peekable().peek() == None
+        self.chars.clone().peekable().peek().is_none()
     }
 
     pub fn advance(&mut self) -> Option<char> {

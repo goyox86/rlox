@@ -5,7 +5,7 @@ use std::{
 
 use crate::raw_array::RawArray;
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Array<T> {
     count: usize,
     buf: RawArray<T>,
@@ -69,6 +69,9 @@ impl<T> Array<T> {
         }
     }
 
+    /// # Safety
+    ///
+    /// If you provide an index beyond self.len you are own your own.
     #[inline]
     pub unsafe fn get_unchecked(&self, index: usize) -> &T {
         &*self.as_ptr().add(index)
@@ -140,7 +143,7 @@ impl<T> Default for Array<T> {
 
 impl<T> Drop for Array<T> {
     fn drop(&mut self) {
-        while let Some(_) = self.pop() {}
+        while self.pop().is_some() {}
     }
 }
 

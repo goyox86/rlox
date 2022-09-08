@@ -10,7 +10,7 @@ use crate::object::{Obj, ObjPointer, String};
 use crate::vm;
 
 // TODO: we don't know if we need this for our implementation
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd)]
 pub enum ObjKind {
     String,
 }
