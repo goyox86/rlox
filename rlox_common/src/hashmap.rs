@@ -35,7 +35,7 @@ where
     }
 
     #[inline]
-    pub fn find_entry_index<Q: ?Sized>(&self, key: &Q) -> usize
+    fn find_entry_index<Q: ?Sized>(&self, key: &Q) -> usize
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
@@ -59,7 +59,7 @@ where
                     }
                 }
                 Entry::Occupied(entry) => {
-                    if entry.key().borrow() == key {
+                    if entry.key.borrow() == key {
                         break index;
                     }
                 }
@@ -156,7 +156,7 @@ where
                 true
             }
             Entry::Occupied(occupied_entry) => {
-                let already_exists = occupied_entry.key() == key.borrow();
+                let already_exists = occupied_entry.key == key;
                 if already_exists {
                     occupied_entry.set_value(value);
                     false
@@ -257,15 +257,15 @@ where
             match entry {
                 Entry::Vacant | Entry::Tombstone => continue,
                 Entry::Occupied(occupied_entry) => {
-                    let index = new_inner.find_entry_index(occupied_entry.key());
+                    let index = new_inner.find_entry_index(&occupied_entry.key);
                     let dest = new_inner.get_entry_mut(index);
-                    unsafe { std::ptr::write(dest, std::ptr::read(entry)) };
+                    unsafe { ptr::write(dest, ptr::read(entry)) };
                     new_len += 1;
                 }
             }
         }
 
-        std::mem::swap(&mut self.inner, &mut new_inner);
+        self.inner = new_inner;
         self.len = new_len;
     }
 }
@@ -298,7 +298,7 @@ where
                     continue;
                 }
                 Entry::Occupied(occupied_entry) => {
-                    result = Some((occupied_entry.key(), occupied_entry.value()));
+                    result = Some((&occupied_entry.key, &occupied_entry.value));
                     break;
                 }
             }
