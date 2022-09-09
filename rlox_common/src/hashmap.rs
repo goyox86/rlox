@@ -360,11 +360,7 @@ where
     K: Hash + Eq,
 {
     fn drop(&mut self) {
-        for index in 0..self.capacity() {
-            unsafe {
-                let _ = ptr::read(self.inner.entries.get(index));
-            }
-        }
+        unsafe { ptr::drop_in_place(self.inner.entries.as_mut_slice()) };
     }
 }
 
