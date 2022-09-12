@@ -195,7 +195,11 @@ where
         }
     }
 
-    pub fn delete(&mut self, key: K) -> bool {
+    pub fn delete<Q: ?Sized>(&mut self, key: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
         if self.is_empty() {
             return false;
         }
@@ -211,7 +215,11 @@ where
         true
     }
 
-    pub fn remove(&mut self, key: K) -> bool {
+    pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
         self.delete(key)
     }
 
@@ -467,9 +475,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fake::{Dummy, Fake, Faker};
 
     #[allow(dead_code)]
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    #[derive(Clone, Debug, Dummy, PartialEq, Eq, Hash, PartialOrd, Ord)]
     struct Foo {
         bar: usize,
     }
@@ -484,6 +493,23 @@ mod tests {
         fn drop(&mut self) {}
     }
 
+    fn create_map<K, V>(quantity: usize) -> (Vec<(K, V)>, HashMap<K, V>)
+    where
+        K: Eq + Hash + Dummy<Faker> + Clone,
+        V: Dummy<Faker> + Clone,
+    {
+        let mut map: HashMap<K, V> = HashMap::new();
+        let mut pairs: Vec<(K, V)> = Vec::new();
+        for _ in 0..quantity {
+            let key: K = Faker.fake();
+            let value: V = Faker.fake();
+            map.set(key.clone(), value.clone());
+            pairs.push((key, value))
+        }
+
+        (pairs, map)
+    }
+
     #[test]
     fn test_set_empty() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
@@ -496,9 +522,9 @@ mod tests {
 
     #[test]
     fn test_set_non_empty_same_key() {
-        let mut map: HashMap<&str, Foo> = HashMap::new();
-        let result1 = map.set("1", Foo { bar: 1 });
-        let result2 = map.set("1", Foo { bar: 2 });
+        let mut map: HashMap<String, Foo> = HashMap::new();
+        let result1 = map.set("1".into(), Foo { bar: 1 });
+        let result2 = map.set("1".into(), Foo { bar: 2 });
         assert_eq!(Some(&Foo { bar: 2 }), map.get("1"));
         assert_eq!(1, map.len());
         assert_eq!(true, result1);
@@ -517,15 +543,10 @@ mod tests {
 
     #[test]
     fn test_set_non_empty_many() {
-        use rand::prelude::*;
-
-        let mut map: HashMap<usize, Foo> = HashMap::new();
-        for _ in 0..100 {
-            let key: usize = random();
-            map.set(key, Foo { bar: 1 });
-            assert_eq!(Some(&Foo { bar: 1 }), map.get(&key));
+        let (keys_values, map) = create_map::<usize, Foo>(100);
+        for (key, value) in keys_values.iter() {
+            assert_eq!(Some(value), map.get(key));
         }
-
         assert_eq!(100, map.len());
     }
 
@@ -556,40 +577,37 @@ mod tests {
 
     #[test]
     fn test_delete_non_empty_many() {
-        use rand::prelude::*;
-        let mut keys: Vec<usize> = Vec::new();
-        let mut map: HashMap<usize, Foo> = HashMap::new();
-        for _ in 0..1000 {
-            let key: usize = random();
-            keys.push(key);
-            map.set(key, Foo { bar: 1 });
-            assert_eq!(Some(&Foo { bar: 1 }), map.get(&key));
+        let (keys_values, mut map) = create_map::<String, Foo>(1000);
+        for (key, value) in keys_values.iter() {
+            assert_eq!(Some(value), map.get(key));
         }
+        assert_eq!(1000, map.len());
 
-        for key in &keys {
-            map.delete(*key);
+        for (key, _) in &keys_values {
+            assert_eq!(true, map.delete(key));
         }
-
         assert_eq!(0, map.len());
     }
 
     #[test]
     fn test_iter() {
-        let mut map: HashMap<usize, Foo> = HashMap::new();
-        let (foo0, foo1, foo2) = (Foo::new(0), Foo::new(1), Foo::new(2));
-        map.set(2, foo2.clone());
-        map.set(1, foo1.clone());
-        map.set(0, foo0.clone());
+        let (mut inserted_entries, map) = create_map::<String, Foo>(100);
 
-        let mut entries: Vec<(&usize, &Foo)> = vec![];
+        let mut iter_entries: Vec<(&String, &Foo)> = vec![];
         for entry in map.iter() {
-            dbg!(entry);
-            entries.push(entry);
+            iter_entries.push(entry);
         }
 
-        let expected_entries = vec![(&0, &foo0), (&1, &foo1), (&2, &foo2)];
-        entries.sort();
-        assert_eq!(expected_entries, entries);
+        inserted_entries.sort();
+        iter_entries.sort();
+
+        let inserted_entries = inserted_entries.iter();
+        inserted_entries
+            .zip(iter_entries.iter())
+            .for_each(|(inserted_entry, iter_entry)| {
+                assert_eq!(*iter_entry.0, inserted_entry.0);
+                assert_eq!(*iter_entry.1, inserted_entry.1);
+            })
     }
 
     #[test]
