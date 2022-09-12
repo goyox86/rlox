@@ -97,7 +97,7 @@ where
 
     /// # Safety: [`entries.get_mut`] is checking bounds.
     #[inline]
-    fn get_entry_mut<'a>(&'a mut self, index: usize) -> &'a mut Entry<K, V> {
+    fn get_entry_mut(&mut self, index: usize) -> &mut Entry<K, V> {
         self.entries.get_mut(index)
     }
 
@@ -204,7 +204,7 @@ where
             return false;
         }
 
-        let entry = self.inner.find_entry_mut(&key);
+        let entry = self.inner.find_entry_mut(key);
         if entry.is_vacant() || entry.is_tombstone() {
             return false;
         }

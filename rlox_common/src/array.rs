@@ -36,13 +36,13 @@ impl<T> Array<T> {
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
         if self.is_empty() {
-            return None;
-        }
-
-        unsafe {
-            self.count -= 1;
-            let value: T = ptr::read(self.buf.as_ptr().add(self.count));
-            Some(value)
+            None
+        } else {
+            unsafe {
+                self.count -= 1;
+                let value: T = ptr::read(self.buf.as_ptr().add(self.count));
+                Some(value)
+            }
         }
     }
 
