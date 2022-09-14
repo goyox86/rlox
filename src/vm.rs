@@ -4,14 +4,22 @@ use std::string::String;
 use std::sync::Mutex;
 use std::{fmt::Display, ptr, result};
 
-use rlox_common::{Array, Stack};
+use rlox_common::{Array, HashMap, Stack};
 
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
-use crate::object::{Obj, ObjPointer, String as LoxString};
+use crate::object::{ManagedPtr, Obj, String as LoxString};
 use crate::value::Value;
 
-pub(crate) static mut HEAP: Option<LinkedList<ObjPointer>> = None;
+use once_cell::sync::OnceCell;
+
+fn heap() -> &'static Mutex<LinkedList<ManagedPtr<Value>>> {
+    static HEAP: OnceCell<Mutex<LinkedList<ManagedPtr<Value>>>> = OnceCell::new();
+    HEAP.get_or_init(|| {
+        let mut heap = LinkedList::new();
+        Mutex::new(heap)
+    })
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct VmOptions {
@@ -28,20 +36,20 @@ pub(crate) struct Vm {
     stack: Stack<Value>,
 }
 
-pub(crate) fn allocate_object(object: Obj) -> ObjPointer {
-    let mut object_ptr = ObjPointer::new(object);
+pub type ObjectRef = ManagedPtr<Value>;
 
-    unsafe {
-        if let Some(heap) = &mut HEAP {
-            heap.push_back(object_ptr);
-        } else {
-            let mut heap = LinkedList::new();
-            heap.push_back(object_ptr);
-            HEAP = Some(heap)
-        };
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub enum ValueOrRef {
+    Value(Value),
+    Ref(ObjectRef),
+}
 
-        object_ptr
-    }
+pub(crate) fn allocate(object: Value) -> ManagedPtr<Value> {
+    let mut object_ptr = ManagedPtr::new(object);
+    let mut heap = heap().lock().unwrap();
+    heap.push_back(object_ptr);
+
+    object_ptr
 }
 
 impl Vm {
@@ -114,17 +122,10 @@ impl Vm {
     }
 
     pub fn free_objects(&mut self) {
-        unsafe {
-            if HEAP.is_none() {
-                return;
-            }
-
-            if let Some(heap) = &mut HEAP {
-                while let Some(mut object_ptr) = heap.pop_back() {
-                    let object = Box::from_raw(object_ptr.as_ptr());
-                    drop(object);
-                }
-            }
+        let mut heap = heap().lock().unwrap();
+        while let Some(mut object_ptr) = heap.pop_back() {
+            let object = unsafe { Box::from_raw(object_ptr.as_ptr()) };
+            drop(object);
         }
     }
 

@@ -6,7 +6,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use crate::object::{Obj, ObjPointer, String};
+use crate::object::{ManagedPtr, Obj, String};
 use crate::vm;
 
 // TODO: we don't know if we need this for our implementation
@@ -16,20 +16,16 @@ pub enum ObjKind {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum Value {
+pub enum Value {
     Number(f64),
     Boolean(bool),
     Nil,
-    Obj(ObjPointer),
+    Obj(Obj),
 }
 
 impl Value {
     pub fn from_string(string: String) -> Self {
-        Self::Obj(ObjPointer::new(Obj::from_string(string)))
-    }
-
-    pub fn from_obj(object_ptr: ObjPointer) -> Self {
-        Self::Obj(object_ptr)
+        Self::Obj(Obj::from_string(string))
     }
 
     pub fn nil() -> Self {
@@ -53,18 +49,12 @@ impl Value {
         matches!(self, Self::Number(..))
     }
 
-    /// Returns `true` if the value is [`Boolean`].
-    ///
-    /// [`Boolean`]: Value::Boolean
     #[must_use]
     #[inline]
     pub fn is_boolean(&self) -> bool {
         matches!(self, Self::Boolean(..))
     }
 
-    /// Returns `true` if the value is [`Nil`].
-    ///
-    /// [`Nil`]: Value::Nil
     #[must_use]
     #[inline]
     pub fn is_nil(&self) -> bool {
@@ -77,9 +67,6 @@ impl Value {
         matches!(self, Self::Nil | Self::Boolean(false))
     }
 
-    /// Returns `true` if the value is [`Obj`].
-    ///
-    /// [`Obj`]: Value::Obj
     #[must_use]
     #[inline]
     pub fn is_obj(&self) -> bool {
@@ -89,16 +76,9 @@ impl Value {
     #[must_use]
     #[inline]
     pub fn is_string(&self) -> bool {
-        self.is_obj() && matches!(**self.as_obj().unwrap(), Obj::String(..))
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn as_obj(&self) -> Option<&ObjPointer> {
-        if let Self::Obj(v) = self {
-            Some(v)
-        } else {
-            None
+        match self {
+            Value::Obj(obj) => obj.is_string(),
+            _ => false,
         }
     }
 
@@ -127,7 +107,7 @@ impl fmt::Display for Value {
             Value::Number(inner) => write!(f, "{}", inner),
             Value::Boolean(inner) => write!(f, "{}", inner),
             Value::Nil => write!(f, "nil"),
-            Value::Obj(obj) => write!(f, "{}", **obj),
+            Value::Obj(obj) => write!(f, "{}", obj),
         }
     }
 }
@@ -154,7 +134,7 @@ impl Add for Value {
                 Value::Number(number + rhs_number)
             }
             (Value::Obj(left), Value::Obj(right)) => {
-                let new_obj = vm::allocate_object(&*left + &*right);
+                let new_obj = left + right;
                 Value::Obj(new_obj)
             }
             (left, right) => panic!("unsupported addition between {} and {}", left, right),

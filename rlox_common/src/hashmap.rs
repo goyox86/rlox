@@ -173,6 +173,14 @@ where
         self.set(key, value)
     }
 
+    pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.get(key).is_some()
+    }
+
     pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
@@ -514,7 +522,7 @@ mod tests {
     fn test_set_empty() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
         assert_eq!(true, map.is_empty());
-        let result = map.set("1", Foo { bar: 2 });
+        let result = map.set("1", Foo::new(2));
         assert_eq!(Some(&Foo { bar: 2 }), map.get("1"));
         assert_eq!(1, map.len());
         assert_eq!(true, result);
@@ -523,9 +531,9 @@ mod tests {
     #[test]
     fn test_set_non_empty_same_key() {
         let mut map: HashMap<String, Foo> = HashMap::new();
-        let result1 = map.set("1".into(), Foo { bar: 1 });
-        let result2 = map.set("1".into(), Foo { bar: 2 });
-        assert_eq!(Some(&Foo { bar: 2 }), map.get("1"));
+        let result1 = map.set("1".into(), Foo::new(1));
+        let result2 = map.set("1".into(), Foo::new(2));
+        assert_eq!(Some(&Foo::new(2)), map.get("1"));
         assert_eq!(1, map.len());
         assert_eq!(true, result1);
         assert_eq!(false, result2);
@@ -534,10 +542,10 @@ mod tests {
     #[test]
     fn test_set_non_empty_diff_key() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
-        map.set("1", Foo { bar: 1 });
-        map.set("2", Foo { bar: 2 });
-        assert_eq!(Some(&Foo { bar: 1 }), map.get("1"));
-        assert_eq!(Some(&Foo { bar: 2 }), map.get("2"));
+        map.set("1", Foo::new(1));
+        map.set("2", Foo::new(2));
+        assert_eq!(Some(&Foo::new(1)), map.get("1"));
+        assert_eq!(Some(&Foo::new(2)), map.get("2"));
         assert_eq!(2, map.len());
     }
 
@@ -560,7 +568,7 @@ mod tests {
     #[test]
     fn test_delete_non_empty_existing() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
-        map.set("1", Foo { bar: 1 });
+        map.set("1", Foo::new(1));
         assert_eq!(map.delete("1"), true);
         assert_eq!(map.get("1"), None);
     }
@@ -568,20 +576,20 @@ mod tests {
     #[test]
     fn test_delete_non_empty_non_existing() {
         let mut map: HashMap<&str, Foo> = HashMap::new();
-        map.set("1", Foo { bar: 1 });
-        map.set("2", Foo { bar: 2 });
+        map.set("1", Foo::new(1));
+        map.set("2", Foo::new(2));
         assert_eq!(map.delete("0"), false);
-        assert_eq!(Some(&Foo { bar: 1 }), map.get("1"));
-        assert_eq!(Some(&Foo { bar: 2 }), map.get("2"));
+        assert_eq!(Some(&Foo::new(1)), map.get("1"));
+        assert_eq!(Some(&Foo::new(2)), map.get("2"));
     }
 
     #[test]
     fn test_delete_non_empty_many() {
-        let (keys_values, mut map) = create_map::<String, Foo>(1000);
+        let (keys_values, mut map) = create_map::<String, Foo>(100);
         for (key, value) in keys_values.iter() {
             assert_eq!(Some(value), map.get(key));
         }
-        assert_eq!(1000, map.len());
+        assert_eq!(100, map.len());
 
         for (key, _) in &keys_values {
             assert_eq!(true, map.delete(key));
@@ -592,13 +600,12 @@ mod tests {
     #[test]
     fn test_iter() {
         let (mut inserted_entries, map) = create_map::<String, Foo>(100);
+        inserted_entries.sort();
 
         let mut iter_entries: Vec<(&String, &Foo)> = vec![];
         for entry in map.iter() {
             iter_entries.push(entry);
         }
-
-        inserted_entries.sort();
         iter_entries.sort();
 
         let inserted_entries = inserted_entries.iter();
