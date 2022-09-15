@@ -4,6 +4,7 @@ mod bytecode;
 mod compiler;
 mod object;
 mod scanner;
+mod string;
 mod value;
 mod vm;
 

@@ -5,8 +5,9 @@ use strum::FromRepr;
 
 use crate::{
     bytecode::{Chunk, Disassembler, OpCode},
-    object::{Object, String},
+    object::Object,
     scanner::{Scanner, Token, TokenKind},
+    string::String,
     value::Value,
     vm::{self, Vm},
 };

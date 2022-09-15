@@ -6,7 +6,8 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use crate::object::{ManagedPtr, Object, String};
+use crate::object::{ManagedPtr, Object};
+use crate::string::String;
 use crate::vm;
 
 #[derive(Clone, Debug)]

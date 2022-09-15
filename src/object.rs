@@ -1,26 +1,22 @@
-use core::fmt;
 use std::{
     borrow::Borrow,
-    fmt::Display,
+    fmt::{self, Display},
     ops::{Add, Deref, DerefMut},
     ptr::NonNull,
     string::String as RustString,
 };
 
 use crate::{
+    string::String,
     value::Value,
     vm::{heap, strings},
 };
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+/// A copyable pointer to values in the Lox heap.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ManagedPtr<T> {
     pub raw: NonNull<T>,
 }
-
-impl<T: Clone> Copy for ManagedPtr<T> {}
-// TODO: Hey, not sure about this
-unsafe impl<T> Sync for ManagedPtr<T> where T: Sync {}
-unsafe impl<T> Send for ManagedPtr<T> where T: Send {}
 
 impl<T> ManagedPtr<T> {
     pub(crate) fn new(object: T) -> Self {
@@ -52,6 +48,12 @@ impl<T> DerefMut for ManagedPtr<T> {
     }
 }
 
+impl<T: Clone> Copy for ManagedPtr<T> {}
+// TODO: Hey, not sure about this
+unsafe impl<T> Sync for ManagedPtr<T> where T: Sync {}
+unsafe impl<T> Send for ManagedPtr<T> where T: Send {}
+
+/// A Lox object allocated in the Lox heap.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Object {
     String(String),
@@ -67,6 +69,7 @@ impl Object {
 
     pub fn allocate_string(string: String) -> ManagedPtr<Object> {
         let mut strings = strings().lock().unwrap();
+
         match strings.get(&string) {
             Some(string_ptr) => *string_ptr,
             None => {
@@ -82,11 +85,11 @@ impl Object {
     }
 
     #[must_use]
-    pub(crate) fn is_string(&self) -> bool {
+    pub fn is_string(&self) -> bool {
         matches!(self, Self::String(..))
     }
 
-    pub(crate) fn as_string(&self) -> Option<&String> {
+    pub fn as_string(&self) -> Option<&String> {
         let Self::String(string) = self;
         Some(string)
     }
@@ -113,50 +116,5 @@ impl Display for Object {
 impl From<Object> for Value {
     fn from(obj: Object) -> Self {
         Self::Obj(Object::allocate(obj))
-    }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct String {
-    inner: std::string::String,
-}
-
-impl String {
-    pub fn new(chars: &str) -> Self {
-        Self {
-            inner: RustString::from(chars),
-        }
-    }
-}
-
-impl Display for String {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)?;
-
-        Ok(())
-    }
-}
-
-impl Add for &String {
-    type Output = String;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        String {
-            inner: format!("{}{}", self.inner, rhs.inner),
-        }
-    }
-}
-
-impl Deref for String {
-    type Target = RustString;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for String {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }

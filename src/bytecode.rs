@@ -7,7 +7,7 @@ use rlox_common::Array;
 
 /// A chunk of bytecode.
 ///
-/// A heap allocated, dynamic array contiguous bytes.
+/// A heap allocated, dynamic array of contiguous bytes.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Chunk {
     pub code: Array<u8>,

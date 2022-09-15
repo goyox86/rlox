@@ -7,7 +7,9 @@ use std::{fmt::Display, ptr, result};
 
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
-use crate::object::{ManagedPtr, Object, String as LoxString};
+use crate::object::{ManagedPtr, Object};
+use crate::string::String as LoxString;
+
 use crate::value::Value;
 use rlox_common::{Array, HashMap, Stack};
 
@@ -27,6 +29,26 @@ pub fn strings() -> &'static Mutex<HashMap<LoxString, ManagedPtr<Object>>> {
         let mut heap = HashMap::new();
         Mutex::new(heap)
     })
+}
+
+type InterpretResult = result::Result<(), VmError>;
+
+#[derive(Debug)]
+pub enum VmError {
+    Compile(CompilerError),
+    Runtime(String, usize),
+}
+
+impl VmError {
+    pub fn runtime(message: &str, line: usize) -> Self {
+        Self::Runtime(message.into(), line)
+    }
+}
+
+impl From<CompilerError> for VmError {
+    fn from(error: CompilerError) -> Self {
+        VmError::Compile(error)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -182,7 +204,7 @@ impl Vm {
 fn run(vm: &mut Vm) -> InterpretResult {
     debug_assert!(!vm.ip.is_null());
 
-    // vm.reset_stack();
+    vm.reset_stack();
 
     loop {
         if vm.options.trace_execution {
@@ -207,19 +229,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let negated = -vm.pop();
                 vm.push(negated);
             }
-            OpCode::Add => {
-                if let (Some(left), Some(right)) = (vm.stack.peek(1), vm.stack.peek(0)) {
-                    if (left.is_number() && right.is_number())
-                        || (left.is_string() && right.is_string())
-                    {
-                        let right = vm.pop();
-                        let left = vm.pop();
-                        vm.push(left + right);
-                    } else {
-                        return vm.runtime_error("operands must be two numbers of two strings.");
-                    }
-                }
-            }
+            OpCode::Add => op_add(vm)?,
             OpCode::Substract => {
                 vm.check_both_number()?;
                 let right = vm.pop();
@@ -266,29 +276,18 @@ fn run(vm: &mut Vm) -> InterpretResult {
     }
 }
 
-type InterpretResult = result::Result<(), VmError>;
-
-#[derive(Debug)]
-pub enum VmError {
-    Compile(CompilerError),
-    Runtime(String, usize),
-}
-
-impl VmError {
-    pub fn runtime(message: &str, line: usize) -> Self {
-        Self::Runtime(message.into(), line)
+#[inline(always)]
+fn op_add(vm: &mut Vm) -> Result<(), VmError> {
+    if let (Some(left), Some(right)) = (vm.stack.peek(1), vm.stack.peek(0)) {
+        if (left.is_number() && right.is_number()) || (left.is_string() && right.is_string()) {
+            let right = vm.pop();
+            let left = vm.pop();
+            vm.push(left + right);
+            Ok(())
+        } else {
+            vm.runtime_error("operands must be two numbers of two strings.")
+        }
+    } else {
+        vm.runtime_error("operands must be two numbers of two strings.")
     }
-}
-
-impl From<CompilerError> for VmError {
-    fn from(error: CompilerError) -> Self {
-        VmError::Compile(error)
-    }
-}
-
-enum OperandsCheck {
-    Pass,
-    LeftWrongType,
-    RightWrongType,
-    Missing,
 }
