@@ -1,9 +1,15 @@
 use core::fmt;
 use std::{
+    borrow::Borrow,
     fmt::Display,
     ops::{Add, Deref, DerefMut},
     ptr::NonNull,
     string::String as RustString,
+};
+
+use crate::{
+    value::Value,
+    vm::{heap, strings},
 };
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -12,8 +18,7 @@ pub struct ManagedPtr<T> {
 }
 
 impl<T: Clone> Copy for ManagedPtr<T> {}
-
-// TODO: Hey, not sure bout theze
+// TODO: Hey, not sure about this
 unsafe impl<T> Sync for ManagedPtr<T> where T: Sync {}
 unsafe impl<T> Send for ManagedPtr<T> where T: Send {}
 
@@ -48,13 +53,32 @@ impl<T> DerefMut for ManagedPtr<T> {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Obj {
+pub enum Object {
     String(String),
 }
 
-impl Obj {
-    pub fn from_string(string: String) -> Self {
-        Self::String(string)
+impl Object {
+    pub fn allocate(value: Object) -> ManagedPtr<Object> {
+        let mut object_ptr = ManagedPtr::new(value);
+        let mut heap = heap().lock().unwrap();
+        heap.push_back(object_ptr);
+        object_ptr
+    }
+
+    pub fn allocate_string(string: String) -> ManagedPtr<Object> {
+        let mut strings = strings().lock().unwrap();
+        match strings.get(&string) {
+            Some(string_ptr) => *string_ptr,
+            None => {
+                let string_ptr = Object::allocate(Object::String(string.clone()));
+                strings.insert(string, string_ptr);
+                string_ptr
+            }
+        }
+    }
+
+    pub fn from_string(string: &str) -> Self {
+        Self::String(String::new(string))
     }
 
     #[must_use]
@@ -63,29 +87,32 @@ impl Obj {
     }
 
     pub(crate) fn as_string(&self) -> Option<&String> {
-        if let Self::String(v) = self {
-            Some(v)
-        } else {
-            None
-        }
+        let Self::String(string) = self;
+        Some(string)
     }
 }
 
-impl Add for Obj {
-    type Output = Obj;
+impl Add for &Object {
+    type Output = Object;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Obj::String(left), Obj::String(right)) => Obj::String(left + right),
+            (Object::String(left), Object::String(right)) => Object::String(left + right),
         }
     }
 }
 
-impl Display for Obj {
+impl Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Obj::String(object) => write!(f, "String(\"{}\")", object),
+            Object::String(object) => write!(f, "String(\"{}\")", object),
         }
+    }
+}
+
+impl From<Object> for Value {
+    fn from(obj: Object) -> Self {
+        Self::Obj(Object::allocate(obj))
     }
 }
 
@@ -110,7 +137,7 @@ impl Display for String {
     }
 }
 
-impl Add for String {
+impl Add for &String {
     type Output = String;
 
     fn add(self, rhs: Self) -> Self::Output {

@@ -1,22 +1,30 @@
 use std::collections::LinkedList;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::string::String;
 use std::sync::Mutex;
 use std::{fmt::Display, ptr, result};
 
-use rlox_common::{Array, HashMap, Stack};
-
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
-use crate::object::{ManagedPtr, Obj, String as LoxString};
+use crate::object::{ManagedPtr, Object, String as LoxString};
 use crate::value::Value;
+use rlox_common::{Array, HashMap, Stack};
 
 use once_cell::sync::OnceCell;
 
-fn heap() -> &'static Mutex<LinkedList<ManagedPtr<Value>>> {
-    static HEAP: OnceCell<Mutex<LinkedList<ManagedPtr<Value>>>> = OnceCell::new();
+pub fn heap() -> &'static Mutex<LinkedList<ManagedPtr<Object>>> {
+    static HEAP: OnceCell<Mutex<LinkedList<ManagedPtr<Object>>>> = OnceCell::new();
     HEAP.get_or_init(|| {
         let mut heap = LinkedList::new();
+        Mutex::new(heap)
+    })
+}
+
+pub fn strings() -> &'static Mutex<HashMap<LoxString, ManagedPtr<Object>>> {
+    static HEAP: OnceCell<Mutex<HashMap<LoxString, ManagedPtr<Object>>>> = OnceCell::new();
+    HEAP.get_or_init(|| {
+        let mut heap = HashMap::new();
         Mutex::new(heap)
     })
 }
@@ -34,22 +42,6 @@ pub(crate) struct Vm {
     ip: *mut u8,
     options: VmOptions,
     stack: Stack<Value>,
-}
-
-pub type ObjectRef = ManagedPtr<Value>;
-
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub enum ValueOrRef {
-    Value(Value),
-    Ref(ObjectRef),
-}
-
-pub(crate) fn allocate(object: Value) -> ManagedPtr<Value> {
-    let mut object_ptr = ManagedPtr::new(object);
-    let mut heap = heap().lock().unwrap();
-    heap.push_back(object_ptr);
-
-    object_ptr
 }
 
 impl Vm {
@@ -106,6 +98,7 @@ impl Vm {
                 .clone()
         }
     }
+
     #[inline]
     fn push(&mut self, value: Value) {
         self.stack.push(value)

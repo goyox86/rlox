@@ -5,7 +5,7 @@ use strum::FromRepr;
 
 use crate::{
     bytecode::{Chunk, Disassembler, OpCode},
-    object::{Obj, String},
+    object::{Object, String},
     scanner::{Scanner, Token, TokenKind},
     value::Value,
     vm::{self, Vm},
@@ -293,10 +293,11 @@ fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
 fn string(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     let lexeme = ctx.previous.lexeme().unwrap();
     let chars = &lexeme[1..lexeme.len() - 1];
-    let string_obj = vm::allocate_object(Obj::String(String::new(chars)));
-    let string_value = Value::Obj(string_obj);
+    let string_obj = String::new(chars);
+    let string_value = Value::Obj(Object::allocate_string(string_obj));
 
     emit_constant(ctx, string_value);
+
     Ok(())
 }
 
