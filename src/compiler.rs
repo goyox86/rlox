@@ -12,7 +12,7 @@ use crate::{
     vm::{self, Vm},
 };
 
-pub(crate) type ParseFn = fn(&mut CompilerCtx) -> Result<(), CompilerError>;
+pub(crate) type ParseFn = fn(&mut CompilerCtx, bool) -> Result<(), CompilerError>;
 
 #[derive(Copy, Clone, Default)]
 pub(crate) struct ParseRule(Option<ParseFn>, Option<ParseFn>, Precedence);
@@ -175,7 +175,7 @@ impl<'source> CompilerCtx<'source> {
         );
         rules.insert(
             TokenKind::Identifier,
-            ParseRule(None, None, Precedence::None),
+            ParseRule(Some(variable), None, Precedence::None),
         );
         rules.insert(
             TokenKind::String,
@@ -227,8 +227,11 @@ impl<'c> Compiler<'c> {
         let mut ctx = CompilerCtx::new(source, self.options);
 
         advance(&mut ctx);
-        expression(&mut ctx)?;
-        consume(&mut ctx, TokenKind::Eof, "expect end of expression.")?;
+        while (!matches(&mut ctx, TokenKind::Eof)) {
+            declaration(&mut ctx)?;
+        }
+        // expression(&mut ctx)?;
+        // consume(&mut ctx, TokenKind::Eof, "expect end of expression.")?;
         end(&mut ctx);
 
         Ok(ctx.chunk)
@@ -239,13 +242,13 @@ fn expression(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     parse_precedence(ctx, Precedence::Assignment)
 }
 
-fn grouping(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+fn grouping(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     expression(ctx)?;
 
     consume(ctx, TokenKind::RightParen, "expect ')' after expression.")
 }
 
-fn binary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+fn binary(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     let previous_token = ctx.previous;
     let rule = get_parse_rule(ctx, previous_token.kind);
 
@@ -268,7 +271,7 @@ fn binary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(())
 }
 
-fn unary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+fn unary(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     let token_kind = ctx.previous.kind;
 
     parse_precedence(ctx, Precedence::Unary)?;
@@ -282,7 +285,7 @@ fn unary(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(())
 }
 
-fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+fn number(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     let previous_token = ctx.previous;
     let number: f64 = f64::from_str(previous_token.lexeme().unwrap()).unwrap();
     let value = Value::Number(number);
@@ -291,7 +294,7 @@ fn number(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(())
 }
 
-fn string(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+fn string(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     let lexeme = ctx.previous.lexeme().unwrap();
     let chars = &lexeme[1..lexeme.len() - 1];
     let string_obj = String::new(chars);
@@ -302,7 +305,7 @@ fn string(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(())
 }
 
-fn literal(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+fn literal(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     let previous_token = ctx.previous;
 
     match previous_token.kind {
@@ -310,6 +313,139 @@ fn literal(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
         TokenKind::Nil => emit_byte(ctx, OpCode::AddNil as u8),
         TokenKind::True => emit_byte(ctx, OpCode::AddTrue as u8),
         _ => unreachable!(),
+    }
+
+    Ok(())
+}
+
+fn variable(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
+    named_variable(ctx, ctx.previous, can_assign);
+
+    Ok(())
+}
+
+fn named_variable(ctx: &mut CompilerCtx, name: Token, can_assign: bool) {
+    let arg = identifier_constant(ctx, name);
+
+    if can_assign && matches(ctx, TokenKind::Equal) {
+        expression(ctx);
+        emit_bytes(ctx, OpCode::SetGlobal as u8, arg);
+    } else {
+        emit_bytes(ctx, OpCode::GetGlobal as u8, arg);
+    }
+}
+
+fn matches(ctx: &mut CompilerCtx, token_kind: TokenKind) -> bool {
+    if !check(ctx, token_kind) {
+        return false;
+    }
+
+    advance(ctx);
+    true
+}
+
+fn check(ctx: &mut CompilerCtx, token_kind: TokenKind) -> bool {
+    ctx.current.kind == token_kind
+}
+
+fn declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    if matches(ctx, TokenKind::Var) {
+        var_declaration(ctx);
+    } else {
+        statement(ctx);
+    }
+
+    if ctx.panic_mode {
+        synchronize(ctx);
+    }
+
+    Ok(())
+}
+
+fn var_declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    let global = parse_variable(ctx, "Expect variable name.")?;
+
+    if matches(ctx, TokenKind::Equal) {
+        expression(ctx)?;
+    } else {
+        emit_byte(ctx, OpCode::AddNil as u8);
+    }
+
+    consume(
+        ctx,
+        TokenKind::Semicolon,
+        "Expect ';' after variable declaration.",
+    )?;
+
+    define_variable(ctx, global);
+
+    Ok(())
+}
+
+fn define_variable(ctx: &mut CompilerCtx, global_index: u8) {
+    emit_bytes(ctx, OpCode::DefineGlobal as u8, global_index as u8);
+}
+
+fn parse_variable(ctx: &mut CompilerCtx, error_msg: &str) -> Result<u8, CompilerError> {
+    consume(ctx, TokenKind::Identifier, error_msg)?;
+    let global_index = identifier_constant(ctx, ctx.previous);
+
+    Ok(global_index)
+}
+
+fn identifier_constant(ctx: &mut CompilerCtx, token: Token) -> u8 {
+    let lexeme = ctx.previous.lexeme().unwrap();
+    let chars = &lexeme[1..lexeme.len() - 1];
+    let string_obj = String::new(chars);
+    let string_value = Value::Obj(Object::allocate_string(string_obj));
+    make_constant(ctx, string_value)
+}
+
+fn statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    if matches(ctx, TokenKind::Print) {
+        print_statement(ctx)?;
+    } else {
+        expression_statement(ctx)?;
+    }
+
+    Ok(())
+}
+
+fn expression_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    expression(ctx)?;
+    consume(ctx, TokenKind::Semicolon, "Expect ';' after expression.")?;
+    emit_byte(ctx, OpCode::Pop as u8);
+    Ok(())
+}
+
+fn print_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    expression(ctx)?;
+    consume(ctx, TokenKind::Semicolon, "Expect ';' after value.")?;
+    emit_byte(ctx, OpCode::Print as u8);
+    Ok(())
+}
+
+fn synchronize(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    ctx.panic_mode = false;
+
+    while ctx.current.kind != TokenKind::Eof {
+        if ctx.previous.kind == TokenKind::Semicolon {
+            return Ok(());
+        }
+
+        if let TokenKind::Class
+        | TokenKind::Fun
+        | TokenKind::Var
+        | TokenKind::For
+        | TokenKind::If
+        | TokenKind::While
+        | TokenKind::Print
+        | TokenKind::Return = ctx.current.kind
+        {
+            return Ok(());
+        }
+
+        advance(ctx)
     }
 
     Ok(())
@@ -351,9 +487,10 @@ fn end(ctx: &mut CompilerCtx) {
 fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(), CompilerError> {
     advance(ctx);
 
+    let can_assign = precedence <= Precedence::Assignment;
     let parse_rule = get_parse_rule(ctx, ctx.previous.kind);
     let mut result = if let Some(prefix_fn) = parse_rule.prefix() {
-        prefix_fn(ctx)
+        prefix_fn(ctx, can_assign)
     } else {
         Err(CompilerError {
             msg: "expect expression.".into(),
@@ -365,8 +502,15 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
         advance(ctx);
         let parse_rule = get_parse_rule(ctx, ctx.previous.kind);
         if let Some(infix_fn) = parse_rule.infix() {
-            result = infix_fn(ctx);
+            result = infix_fn(ctx, can_assign);
         }
+    }
+
+    if can_assign && matches(ctx, TokenKind::Equal) {
+        result = Err(CompilerError {
+            msg: "invalid assignment target.".into(),
+            line: ctx.current.line,
+        });
     }
 
     result

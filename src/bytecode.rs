@@ -60,6 +60,11 @@ pub(crate) enum OpCode {
     Multiply,
     Divide,
     Not,
+    Print,
+    Pop,
+    DefineGlobal,
+    GetGlobal,
+    SetGlobal,
 }
 
 #[derive(Debug)]
@@ -123,6 +128,11 @@ impl<'d> Disassembler<'d> {
             OpCode::Multiply => self.simple_instruction("OP_MULTIPLY", offset, output),
             OpCode::Divide => self.simple_instruction("OP_DIVIDE", offset, output),
             OpCode::Not => self.simple_instruction("OP_NOT", offset, output),
+            OpCode::Print => self.simple_instruction("OP_PRINT", offset, output),
+            OpCode::Pop => self.simple_instruction("OP_POP", offset, output),
+            OpCode::DefineGlobal => self.constant_instruction("OP_DEFINE_GLOBAL", offset, output),
+            OpCode::GetGlobal => self.constant_instruction("OP_GET_GLOBAL", offset, output),
+            OpCode::SetGlobal => self.constant_instruction("OP_SET_GLOBAL", offset, output),
             _ => unreachable!(),
         };
 

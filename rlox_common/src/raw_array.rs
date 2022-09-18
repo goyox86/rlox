@@ -156,7 +156,7 @@ unsafe impl<T> Send for RawArray<T> {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     #[allow(dead_code)]
     #[derive(Debug, PartialEq)]

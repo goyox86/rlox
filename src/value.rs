@@ -83,6 +83,14 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_obj(&self) -> Option<&ManagedPtr<Object>> {
+        if let Self::Obj(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 impl fmt::Display for Value {

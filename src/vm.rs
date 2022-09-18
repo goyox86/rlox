@@ -64,6 +64,7 @@ pub(crate) struct Vm {
     ip: *mut u8,
     options: VmOptions,
     stack: Stack<Value>,
+    globals: HashMap<LoxString, Value>,
 }
 
 impl Vm {
@@ -76,6 +77,7 @@ impl Vm {
             stack: Stack::new(),
             options,
             source: None,
+            globals: HashMap::new(),
         }
     }
 
@@ -119,6 +121,13 @@ impl Vm {
                 .get_unchecked(const_index_byte.into())
                 .clone()
         }
+    }
+
+    #[inline]
+    fn read_string(&mut self) -> LoxString {
+        let string = self.read_constant();
+        let string = string.as_obj().unwrap().as_string().unwrap();
+        string.clone()
     }
 
     #[inline]
@@ -204,7 +213,7 @@ impl Vm {
 fn run(vm: &mut Vm) -> InterpretResult {
     debug_assert!(!vm.ip.is_null());
 
-    vm.reset_stack();
+    // vm.reset_stack();
 
     loop {
         if vm.options.trace_execution {
@@ -216,10 +225,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
         let opcode: OpCode = OpCode::from_repr(byte).expect("cannot decode instruction");
 
         match opcode {
-            OpCode::Return => {
-                println!("{}", vm.pop());
-                return Ok(());
-            }
+            OpCode::Return => return Ok(()),
             OpCode::AddConstant => {
                 let constant = vm.read_constant();
                 vm.push(constant);
@@ -271,6 +277,33 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let right = vm.pop();
                 let left = vm.pop();
                 vm.push(Value::from(left < right));
+            }
+            OpCode::Print => println!("{}", vm.pop()),
+            OpCode::Pop => {
+                _ = vm.pop();
+            }
+            OpCode::DefineGlobal => {
+                let name = vm.read_string();
+                let value = vm.stack.peek(0).unwrap().clone();
+                vm.globals.set(name, value);
+                vm.pop();
+            }
+            OpCode::GetGlobal => {
+                let name = vm.read_string();
+                match vm.globals.get(&name) {
+                    Some(value) => vm.push(value.clone()),
+                    None => return vm.runtime_error(&format!("Undefined variable {}", name)),
+                };
+            }
+            OpCode::SetGlobal => {
+                let name = vm.read_string();
+                if vm
+                    .globals
+                    .set(name.clone(), vm.stack.peek(0).unwrap().clone())
+                {
+                    vm.globals.delete(&name);
+                    return vm.runtime_error(&format!("Undefined variable {}", name));
+                }
             }
         }
     }

@@ -29,25 +29,8 @@ struct Args {
     #[clap(short, long, value_parser)]
     print_code: bool,
 
-    // Loc source code file path
+    // Lox source code file path
     file_path: Option<PathBuf>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Foo {
-    bar: usize,
-}
-
-impl Foo {
-    pub fn new(bar: usize) -> Self {
-        Self { bar }
-    }
-}
-
-impl Drop for Foo {
-    fn drop(&mut self) {
-        println!("Drop called!");
-    }
 }
 
 fn main() -> std::io::Result<()> {
@@ -62,7 +45,7 @@ fn main() -> std::io::Result<()> {
     if let Some(ref file_path) = args.file_path {
         run_file(file_path, Some(vm_opts))?;
     } else {
-        repl(None)?;
+        repl(Some(vm_opts))?;
     }
 
     Ok(())
@@ -71,7 +54,6 @@ fn main() -> std::io::Result<()> {
 fn run_file(file_path: &Path, vm_opts: Option<vm::VmOptions>) -> std::io::Result<()> {
     let mut file = File::open(file_path)?;
     let mut source = String::new();
-
     file.read_to_string(&mut source)?;
 
     let mut vm = Vm::new(vm_opts);
