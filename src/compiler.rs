@@ -230,12 +230,24 @@ impl<'c> Compiler<'c> {
         while (!matches(&mut ctx, TokenKind::Eof)) {
             declaration(&mut ctx)?;
         }
-        // expression(&mut ctx)?;
-        // consume(&mut ctx, TokenKind::Eof, "expect end of expression.")?;
         end(&mut ctx);
 
         Ok(ctx.chunk)
     }
+}
+
+fn declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    if matches(ctx, TokenKind::Var) {
+        var_declaration(ctx)?
+    } else {
+        statement(ctx)?
+    }
+
+    if ctx.panic_mode {
+        synchronize(ctx)?
+    }
+
+    Ok(())
 }
 
 fn expression(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
@@ -347,20 +359,6 @@ fn check(ctx: &mut CompilerCtx, token_kind: TokenKind) -> bool {
     ctx.current.kind == token_kind
 }
 
-fn declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
-    if matches(ctx, TokenKind::Var) {
-        var_declaration(ctx)?
-    } else {
-        statement(ctx)?
-    }
-
-    if ctx.panic_mode {
-        synchronize(ctx)?
-    }
-
-    Ok(())
-}
-
 fn var_declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     let global = parse_variable(ctx, "Expect variable name.")?;
 
@@ -373,7 +371,7 @@ fn var_declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     consume(
         ctx,
         TokenKind::Semicolon,
-        "Expect ';' after variable declaration.",
+        "expect ';' after variable declaration.",
     )?;
 
     define_variable(ctx, global);
@@ -411,7 +409,7 @@ fn statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
 
 fn expression_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     expression(ctx)?;
-    consume(ctx, TokenKind::Semicolon, "Expect ';' after expression.")?;
+    consume(ctx, TokenKind::Semicolon, "expect ';' after expression.")?;
     emit_byte(ctx, OpCode::Pop as u8);
     Ok(())
 }
@@ -624,5 +622,38 @@ mod tests {
         });
 
         assert_eq!(expected_error, compiler.compile("(2 + 2"));
+    }
+
+    #[test]
+    fn expr_stmt_missing_semicolon_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect ';' after expression.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("2 + 2"));
+    }
+
+    #[test]
+    fn var_decl_missing_semicolon_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "expect ';' after variable declaration.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("var answer = 42"));
+    }
+
+    #[test]
+    fn invalid_assigment_target_error() {
+        let compiler = Compiler::new(None);
+        let expected_error = Err(CompilerError {
+            msg: "invalid assignment target.".into(),
+            line: 1,
+        });
+
+        assert_eq!(expected_error, compiler.compile("2 + 2 = 42;"));
     }
 }
