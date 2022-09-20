@@ -1,10 +1,16 @@
-use std::{borrow::Borrow, collections::hash_map::DefaultHasher, hash::Hash, hash::Hasher, ptr};
+use std::{
+    borrow::Borrow,
+    collections::hash_map::DefaultHasher,
+    fmt::{Debug, Display},
+    hash::Hash,
+    hash::Hasher,
+    ptr,
+};
 
 use crate::raw_array::RawArray;
 
 const MAX_LOAD: f32 = 0.75;
 
-#[derive(Debug, Default)]
 pub struct HashMapInner<K, V>
 where
     K: PartialEq + Eq + Hash,
@@ -24,9 +30,11 @@ where
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
-        let mut me = Self::new();
-        me.entries.grow(Some(capacity));
-        me
+        let mut entries: RawArray<Entry<K, V>> = RawArray::with_capacity(capacity);
+        for entry in entries.as_mut_slice() {
+            unsafe { ptr::write(entry, Entry::Vacant) };
+        }
+        Self { entries }
     }
 
     #[inline]
@@ -64,7 +72,6 @@ where
                     }
                 }
             }
-
             index = (index + 1) % self.capacity();
         }
     }
@@ -116,7 +123,6 @@ where
     }
 }
 
-#[derive(Debug)]
 pub struct HashMap<K, V>
 where
     K: PartialEq + Eq + Hash,
@@ -261,13 +267,13 @@ where
 
     #[inline]
     fn grow(&mut self) {
-        if self.capacity() == 0 {
-            // Capacity by default for an empty RawArray is 8 elements.
-            self.inner.grow(None);
-            return;
-        }
+        let new_capacity = if self.capacity() == 0 {
+            8
+        } else {
+            self.capacity() * 2
+        };
+        let mut new_inner: HashMapInner<K, V> = HashMapInner::with_capacity(new_capacity);
 
-        let mut new_inner: HashMapInner<K, V> = HashMapInner::with_capacity(self.capacity() * 2);
         let mut new_len = 0;
         for entry in self.inner.entries.as_slice() {
             match entry {
@@ -301,6 +307,10 @@ where
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.map.is_empty() {
+            return None;
+        }
+
         if self.at == self.map.capacity() - 1 {
             return None;
         }
@@ -339,6 +349,10 @@ where
     type Item = (&'a K, &'a mut V);
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.map.is_empty() {
+            return None;
+        }
+
         loop {
             let entry = self.map.inner.get_entry_mut(self.at).as_occupied_mut();
             self.at += 1;
@@ -365,8 +379,8 @@ where
 {
     fn default() -> Self {
         Self {
-            inner: Default::default(),
-            len: Default::default(),
+            inner: HashMapInner::new(),
+            len: 0,
         }
     }
 }

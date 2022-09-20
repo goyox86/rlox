@@ -1,5 +1,6 @@
 use std::{
     alloc::{alloc_zeroed, dealloc, Layout},
+    fmt::Debug,
     marker::PhantomData,
     ptr::{self, NonNull},
     slice,
@@ -25,7 +26,12 @@ impl<T> RawArray<T> {
 
     pub fn with_capacity(capacity: usize) -> Self {
         let mut me = Self::new();
-        me.grow(Some(capacity));
+        let layout = me.layout_for(capacity);
+        unsafe {
+            let new_ptr = alloc_zeroed(layout);
+            me.ptr = NonNull::new_unchecked(new_ptr.cast())
+        }
+        me.capacity = capacity;
         me
     }
 
@@ -94,12 +100,7 @@ impl<T> RawArray<T> {
 
     pub fn grow(&mut self, new_capacity: Option<usize>) {
         if self.capacity == 0 {
-            self.capacity = new_capacity.unwrap_or_else(|| self.grow_capacity());
-            let new_layout = self.layout_for(self.capacity);
-            unsafe {
-                let new_ptr = alloc_zeroed(new_layout);
-                self.ptr = NonNull::new_unchecked(new_ptr.cast())
-            }
+            *self = RawArray::with_capacity(self.grow_capacity());
             return;
         }
 
@@ -146,7 +147,7 @@ impl<T> Drop for RawArray<T> {
         if self.capacity != 0 {
             let layout = Layout::array::<T>(self.capacity).unwrap();
             unsafe {
-                dealloc(self.ptr.as_ptr() as *mut u8, layout);
+                dealloc(self.as_ptr() as *mut u8, layout);
             }
         }
     }

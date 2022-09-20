@@ -301,7 +301,6 @@ fn string(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> 
     let string_value = Value::Obj(Object::allocate_string(string_obj));
 
     emit_constant(ctx, string_value);
-
     Ok(())
 }
 
@@ -394,8 +393,7 @@ fn parse_variable(ctx: &mut CompilerCtx, error_msg: &str) -> Result<u8, Compiler
 }
 
 fn identifier_constant(ctx: &mut CompilerCtx, token: Token) -> u8 {
-    let lexeme = ctx.previous.lexeme().unwrap();
-    let chars = &lexeme[1..lexeme.len() - 1];
+    let chars = &ctx.previous.lexeme().unwrap();
     let string_obj = String::new(chars);
     let string_value = Value::Obj(Object::allocate_string(string_obj));
     make_constant(ctx, string_value)

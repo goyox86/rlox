@@ -57,7 +57,6 @@ pub(crate) struct VmOptions {
     pub compiler: CompilerOptions,
 }
 
-#[derive(Debug)]
 pub(crate) struct Vm {
     chunk: Option<Chunk>,
     source: Option<String>,
@@ -88,9 +87,7 @@ impl Vm {
         self.chunk = Some(chunk);
         self.ip = ip_start;
 
-        let result = run(self);
-        self.free_objects();
-        result
+        run(self)
     }
 
     pub fn compile(&mut self) -> Result<Chunk, VmError> {
@@ -145,20 +142,20 @@ impl Vm {
         self.stack.reset();
     }
 
-    pub fn free_objects(&mut self) {
-        let mut heap = heap().lock().unwrap();
-        while let Some(mut object_ptr) = heap.pop_back() {
-            let object = unsafe { Box::from_raw(object_ptr.as_ptr()) };
-            drop(object);
-        }
-    }
-
     #[inline]
     fn current_instruction_offset(&self) -> usize {
         unsafe {
             self.ip
                 .offset_from(self.chunk.as_ref().expect("chunk expected here").ptr())
                 as usize
+        }
+    }
+
+    pub fn free_objects(&mut self) {
+        let mut heap = heap().lock().unwrap();
+        while let Some(mut object_ptr) = heap.pop_back() {
+            let object = unsafe { Box::from_raw(object_ptr.as_ptr()) };
+            drop(object);
         }
     }
 
@@ -207,6 +204,12 @@ impl Vm {
             message,
             self.chunk.as_ref().unwrap().lines[instruction],
         ))
+    }
+}
+
+impl Drop for Vm {
+    fn drop(&mut self) {
+        self.free_objects();
     }
 }
 
@@ -285,7 +288,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
             OpCode::DefineGlobal => {
                 let name = vm.read_string();
                 let value = vm.stack.peek(0).unwrap().clone();
-                vm.globals.set(name, value);
+                vm.globals.insert(name, value);
                 vm.pop();
             }
             OpCode::GetGlobal => {
@@ -297,11 +300,13 @@ fn run(vm: &mut Vm) -> InterpretResult {
             }
             OpCode::SetGlobal => {
                 let name = vm.read_string();
-                if vm
+
+                let new_key = vm
                     .globals
-                    .set(name.clone(), vm.stack.peek(0).unwrap().clone())
-                {
-                    vm.globals.delete(&name);
+                    .insert(name.clone(), vm.stack.peek(0).unwrap().clone());
+
+                if new_key {
+                    vm.globals.remove(&name);
                     return vm.runtime_error(&format!("Undefined variable {}", name));
                 }
             }
