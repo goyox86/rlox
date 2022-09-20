@@ -1,10 +1,5 @@
 use std::{
-    borrow::Borrow,
-    collections::hash_map::DefaultHasher,
-    fmt::{Debug, Display},
-    hash::Hash,
-    hash::Hasher,
-    ptr,
+    borrow::Borrow, collections::hash_map::DefaultHasher, fmt::Debug, hash::Hash, hash::Hasher, ptr,
 };
 
 use crate::raw_array::RawArray;

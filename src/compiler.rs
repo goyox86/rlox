@@ -447,12 +447,13 @@ fn synchronize(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(())
 }
 
-#[inline(always)]
+#[inline]
 fn advance(ctx: &mut CompilerCtx) {
     ctx.previous = ctx.current;
     ctx.current = ctx.scanner.scan_token();
 }
 
+#[inline]
 fn consume(
     ctx: &mut CompilerCtx,
     token_kind: TokenKind,
@@ -469,6 +470,7 @@ fn consume(
     })
 }
 
+#[inline]
 fn end(ctx: &mut CompilerCtx) {
     emit_return(ctx);
 
@@ -480,6 +482,7 @@ fn end(ctx: &mut CompilerCtx) {
     }
 }
 
+#[inline]
 fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(), CompilerError> {
     advance(ctx);
 
@@ -513,6 +516,12 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
     result
 }
 
+fn get_parse_rule(ctx: &mut CompilerCtx, token_kind: TokenKind) -> ParseRule {
+    assert_ne!(token_kind, TokenKind::Dummy);
+
+    *ctx.parse_rules.get(&token_kind).unwrap()
+}
+
 #[inline(always)]
 fn emit_return(ctx: &mut CompilerCtx) {
     emit_byte(ctx, OpCode::Return as u8)
@@ -542,16 +551,20 @@ fn make_constant(ctx: &mut CompilerCtx, value: Value) -> u8 {
     ctx.chunk.add_constant(value) as u8
 }
 
-fn get_parse_rule(ctx: &mut CompilerCtx, token_kind: TokenKind) -> ParseRule {
-    assert_ne!(token_kind, TokenKind::Dummy);
-
-    *ctx.parse_rules.get(&token_kind).unwrap()
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct CompilerError {
     msg: std::string::String,
     line: usize,
+}
+
+impl CompilerError {
+    pub fn msg(&self) -> &std::string::String {
+        &self.msg
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
 }
 
 #[cfg(test)]

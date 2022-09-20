@@ -51,6 +51,19 @@ impl From<CompilerError> for VmError {
     }
 }
 
+impl Display for VmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VmError::Compile(error) => {
+                write!(f, "[line: {}] compile error: {}", error.line(), error.msg())
+            }
+            VmError::Runtime(error, line) => write!(f, "[line: {}] runtime error: {}", line, error),
+        }?;
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct VmOptions {
     pub trace_execution: bool,
@@ -173,7 +186,7 @@ impl Vm {
         print!("{}", disassembled_instruction)
     }
 
-    #[inline(always)]
+    #[inline]
     fn check_both_number(&mut self) -> InterpretResult {
         if let (Some(left), Some(right)) = (self.stack.peek(1), self.stack.peek(0)) {
             if !left.is_number() || !right.is_number() {
@@ -186,7 +199,7 @@ impl Vm {
         Ok(())
     }
 
-    #[inline(always)]
+    #[inline]
     fn check_number(&mut self) -> InterpretResult {
         if !self.stack.peek(0).unwrap().is_number() {
             return self.runtime_error("operand must be a number.");
@@ -225,7 +238,8 @@ fn run(vm: &mut Vm) -> InterpretResult {
         }
 
         let byte: u8 = vm.read_byte();
-        let opcode: OpCode = OpCode::from_repr(byte).expect("cannot decode instruction");
+        let opcode: OpCode =
+            OpCode::from_repr(byte).expect("internal error: cannot decode instruction");
 
         match opcode {
             OpCode::Return => return Ok(()),
@@ -283,7 +297,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
             }
             OpCode::Print => println!("{}", vm.pop()),
             OpCode::Pop => {
-                _ = vm.pop();
+                vm.pop();
             }
             OpCode::DefineGlobal => {
                 let name = vm.read_string();
@@ -304,7 +318,6 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let new_key = vm
                     .globals
                     .insert(name.clone(), vm.stack.peek(0).unwrap().clone());
-
                 if new_key {
                     vm.globals.remove(&name);
                     return vm.runtime_error(&format!("Undefined variable {}", name));
