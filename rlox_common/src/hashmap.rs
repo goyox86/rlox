@@ -599,11 +599,11 @@ mod tests {
 
     #[test]
     fn test_delete_non_empty_many() {
-        let (keys_values, mut map) = create_map::<String, Foo>(100);
+        let (keys_values, mut map) = create_map::<String, Foo>(1000);
         for (key, value) in keys_values.iter() {
             assert_eq!(Some(value), map.get(key));
         }
-        assert_eq!(100, map.len());
+        assert_eq!(1000, map.len());
 
         for (key, _) in &keys_values {
             assert_eq!(true, map.delete(key));
@@ -612,23 +612,30 @@ mod tests {
     }
 
     #[test]
+    fn test_iter_empty() {
+        let map: HashMap<usize, String> = HashMap::new();
+        assert_eq!(map.iter().next(), None);
+    }
+
+    #[test]
+    fn test_iter_mut_empty() {
+        let mut map: HashMap<usize, String> = HashMap::new();
+        assert_eq!(map.iter_mut().next(), None);
+    }
+
+    #[test]
     fn test_iter() {
-        let (mut inserted_entries, map) = create_map::<String, Foo>(100);
-        inserted_entries.sort();
+        let mut map: HashMap<usize, String> = HashMap::new();
+        map.set(1, "1".into());
+        map.set(2, "2".into());
+        map.set(3, "3".into());
 
-        let mut iter_entries: Vec<(&String, &Foo)> = vec![];
-        for entry in map.iter() {
-            iter_entries.push(entry);
-        }
-        iter_entries.sort();
-
-        let inserted_entries = inserted_entries.iter();
-        inserted_entries
-            .zip(iter_entries.iter())
-            .for_each(|(inserted_entry, iter_entry)| {
-                assert_eq!(*iter_entry.0, inserted_entry.0);
-                assert_eq!(*iter_entry.1, inserted_entry.1);
-            })
+        let mut iter_entries = map.iter();
+        // Order does not matter, for these particular set of entries they come like this.
+        assert_eq!(iter_entries.next(), Some((&1, &"1".into())));
+        assert_eq!(iter_entries.next(), Some((&3, &"3".into())));
+        assert_eq!(iter_entries.next(), Some((&2, &"2".into())));
+        assert_eq!(iter_entries.next(), None);
     }
 
     #[test]

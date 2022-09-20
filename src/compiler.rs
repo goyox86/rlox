@@ -349,13 +349,13 @@ fn check(ctx: &mut CompilerCtx, token_kind: TokenKind) -> bool {
 
 fn declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     if matches(ctx, TokenKind::Var) {
-        var_declaration(ctx);
+        var_declaration(ctx)?
     } else {
-        statement(ctx);
+        statement(ctx)?
     }
 
     if ctx.panic_mode {
-        synchronize(ctx);
+        synchronize(ctx)?
     }
 
     Ok(())
@@ -498,6 +498,7 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
 
     while precedence <= get_parse_rule(ctx, ctx.current.kind).precedence() {
         advance(ctx);
+
         let parse_rule = get_parse_rule(ctx, ctx.previous.kind);
         if let Some(infix_fn) = parse_rule.infix() {
             result = infix_fn(ctx, can_assign);
@@ -505,7 +506,7 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
     }
 
     if can_assign && matches(ctx, TokenKind::Equal) {
-        result = Err(CompilerError {
+        return Err(CompilerError {
             msg: "invalid assignment target.".into(),
             line: ctx.current.line,
         });
