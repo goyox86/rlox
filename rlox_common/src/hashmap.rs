@@ -26,9 +26,9 @@ where
 
     pub fn with_capacity(capacity: usize) -> Self {
         let mut entries: RawArray<Entry<K, V>> = RawArray::with_capacity(capacity);
-        for entry in entries.as_mut_slice() {
+        entries.as_mut_slice().iter_mut().for_each(|entry| {
             unsafe { ptr::write(entry, Entry::Vacant) };
-        }
+        });
         Self { entries }
     }
 
@@ -51,10 +51,7 @@ where
             let entry = self.get_entry(index);
             match entry {
                 Entry::Vacant => {
-                    break match tombstone {
-                        Some(tombstone_index) => tombstone_index,
-                        None => index,
-                    };
+                    break tombstone.map_or_else(|| index, |tombstone_index| tombstone_index)
                 }
                 Entry::Tombstone => {
                     if tombstone.is_none() {
@@ -77,8 +74,7 @@ where
         K: Borrow<Q>,
         Q: Hash + Eq,
     {
-        let index = self.find_entry_index(key);
-        self.get_entry(index)
+        self.get_entry(self.find_entry_index(key))
     }
 
     #[inline]
@@ -87,8 +83,7 @@ where
         K: Borrow<Q>,
         Q: Hash + Eq,
     {
-        let index = self.find_entry_index(key);
-        self.get_entry_mut(index)
+        self.get_entry_mut(self.find_entry_index(key))
     }
 
     /// # Safety: [`entries.get`] is checking bounds.
@@ -103,14 +98,11 @@ where
         self.entries.get_mut(index)
     }
 
-    pub fn grow(&mut self, new_capacity: Option<usize>) {
-        self.entries.grow(new_capacity);
-    }
-
-    fn hash<Q: ?Sized>(&self, key: &Q) -> u64
+    fn hash<Q>(&self, key: &Q) -> u64
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
+        Q: ?Sized,
     {
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
@@ -247,14 +239,6 @@ where
         self.len == 0
     }
 
-    pub fn iter(&'_ self) -> Iter<'_, K, V> {
-        Iter { map: self, at: 0 }
-    }
-
-    pub fn iter_mut(&'_ mut self) -> IterMut<'_, K, V> {
-        IterMut { map: self, at: 0 }
-    }
-
     #[inline]
     fn needs_to_grow(&self) -> bool {
         self.len + 1 > (self.capacity() as f32 * MAX_LOAD) as usize
@@ -284,6 +268,14 @@ where
 
         self.inner = new_inner;
         self.len = new_len;
+    }
+
+    pub fn iter(&'_ self) -> Iter<'_, K, V> {
+        Iter { map: self, at: 0 }
+    }
+
+    pub fn iter_mut(&'_ mut self) -> IterMut<'_, K, V> {
+        IterMut { map: self, at: 0 }
     }
 }
 
