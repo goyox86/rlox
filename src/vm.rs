@@ -5,15 +5,14 @@ use std::string::String;
 use std::sync::Mutex;
 use std::{fmt::Display, ptr, result};
 
+use once_cell::sync::OnceCell;
+
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
 use crate::object::{ManagedPtr, Object};
 use crate::string::String as LoxString;
-
 use crate::value::Value;
 use rlox_common::{Array, HashMap, Stack};
-
-use once_cell::sync::OnceCell;
 
 pub fn heap() -> &'static Mutex<LinkedList<ManagedPtr<Object>>> {
     static HEAP: OnceCell<Mutex<LinkedList<ManagedPtr<Object>>>> = OnceCell::new();
@@ -31,17 +30,18 @@ pub fn strings() -> &'static Mutex<HashMap<LoxString, ManagedPtr<Object>>> {
     })
 }
 
-type InterpretResult = result::Result<(), VmError>;
-
 #[derive(Debug)]
 pub enum VmError {
     Compile(CompilerError),
-    Runtime(String, usize),
+    Runtime(RuntimeError),
 }
 
 impl VmError {
-    pub fn runtime(message: &str, line: usize) -> Self {
-        Self::Runtime(message.into(), line)
+    pub fn runtime(msg: &str, line: usize) -> Self {
+        Self::Runtime(RuntimeError {
+            msg: msg.to_string(),
+            line,
+        })
     }
 }
 
@@ -51,16 +51,42 @@ impl From<CompilerError> for VmError {
     }
 }
 
+impl From<RuntimeError> for VmError {
+    fn from(error: RuntimeError) -> Self {
+        VmError::Runtime(error)
+    }
+}
+
+type InterpretResult = result::Result<(), VmError>;
+
 impl Display for VmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VmError::Compile(error) => {
                 write!(f, "[line: {}] compile error: {}", error.line(), error.msg())
             }
-            VmError::Runtime(error, line) => write!(f, "[line: {}] runtime error: {}", line, error),
+            VmError::Runtime(error) => {
+                write!(f, "[line: {}] runtime error: {}", error.line(), error.msg())
+            }
         }?;
 
         Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct RuntimeError {
+    msg: String,
+    line: usize,
+}
+
+impl RuntimeError {
+    pub fn msg(&self) -> &str {
+        self.msg.as_ref()
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
     }
 }
 
@@ -151,6 +177,17 @@ impl Vm {
     }
 
     #[inline]
+    fn peek(&mut self, distance: usize) -> Result<Value, RuntimeError> {
+        match self.stack.peek(distance) {
+            Some(value) => Ok(value.clone()),
+            None => Err(RuntimeError {
+                msg: format!("no value at distance: {} in the stack", distance),
+                line: self.current_line(),
+            }),
+        }
+    }
+
+    #[inline]
     fn reset_stack(&mut self) {
         self.stack.reset();
     }
@@ -162,6 +199,12 @@ impl Vm {
                 .offset_from(self.chunk.as_ref().expect("chunk expected here").ptr())
                 as usize
         }
+    }
+
+    fn current_line(&self) -> usize {
+        let instruction = self.current_instruction_offset();
+
+        self.chunk.as_ref().unwrap().lines[instruction]
     }
 
     pub fn free_objects(&mut self) {
@@ -190,10 +233,10 @@ impl Vm {
     fn check_both_number(&mut self) -> InterpretResult {
         if let (Some(left), Some(right)) = (self.stack.peek(1), self.stack.peek(0)) {
             if !left.is_number() || !right.is_number() {
-                return self.runtime_error("operand must be a number.");
+                return self.runtime_error("operand must be a number");
             }
         } else {
-            return self.runtime_error("missing operand.");
+            return self.runtime_error("missing operand");
         }
 
         Ok(())
@@ -202,7 +245,7 @@ impl Vm {
     #[inline]
     fn check_number(&mut self) -> InterpretResult {
         if !self.stack.peek(0).unwrap().is_number() {
-            return self.runtime_error("operand must be a number.");
+            return self.runtime_error("operand must be a number");
         }
 
         Ok(())
@@ -272,8 +315,8 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 vm.push(left / right);
             }
             OpCode::AddNil => vm.push(Value::Nil),
-            OpCode::AddTrue => vm.push(Value::Boolean(true)),
-            OpCode::AddFalse => vm.push(Value::Boolean(false)),
+            OpCode::AddTrue => vm.push(Value::r#false()),
+            OpCode::AddFalse => vm.push(Value::r#true()),
             OpCode::Not => {
                 let value = vm.pop();
                 vm.push(Value::from(value.is_falsey()))
@@ -301,7 +344,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
             }
             OpCode::DefineGlobal => {
                 let name = vm.read_string();
-                let value = vm.stack.peek(0).unwrap().clone();
+                let value = vm.peek(0)?;
                 vm.globals.insert(name, value);
                 vm.pop();
             }
@@ -309,18 +352,17 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let name = vm.read_string();
                 match vm.globals.get(&name) {
                     Some(value) => vm.push(value.clone()),
-                    None => return vm.runtime_error(&format!("Undefined variable {}", name)),
+                    None => return vm.runtime_error(&format!("undefined variable '{}'", name)),
                 };
             }
             OpCode::SetGlobal => {
                 let name = vm.read_string();
 
-                let new_key = vm
-                    .globals
-                    .insert(name.clone(), vm.stack.peek(0).unwrap().clone());
+                let value = vm.peek(0)?;
+                let new_key = vm.globals.insert(name.clone(), value);
                 if new_key {
                     vm.globals.remove(&name);
-                    return vm.runtime_error(&format!("Undefined variable {}", name));
+                    return vm.runtime_error(&format!("undefined variable '{}'", name));
                 }
             }
         }
@@ -329,16 +371,13 @@ fn run(vm: &mut Vm) -> InterpretResult {
 
 #[inline(always)]
 fn op_add(vm: &mut Vm) -> Result<(), VmError> {
-    if let (Some(left), Some(right)) = (vm.stack.peek(1), vm.stack.peek(0)) {
-        if (left.is_number() && right.is_number()) || (left.is_string() && right.is_string()) {
-            let right = vm.pop();
-            let left = vm.pop();
-            vm.push(left + right);
-            Ok(())
-        } else {
-            vm.runtime_error("operands must be two numbers of two strings.")
-        }
+    let (left, right) = (vm.peek(1)?, vm.peek(0)?);
+    if (left.is_number() && right.is_number()) || (left.is_string() && right.is_string()) {
+        let right = vm.pop();
+        let left = vm.pop();
+        vm.push(left + right);
+        Ok(())
     } else {
-        vm.runtime_error("operands must be two numbers of two strings.")
+        vm.runtime_error("operands must be two numbers of two strings")
     }
 }

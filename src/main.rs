@@ -65,7 +65,7 @@ fn run_file(file_path: &Path, vm_opts: Option<vm::VmOptions>) -> std::io::Result
             eprintln!("compile error: {:?}", error);
             exit(65)
         }
-        error @ Err(vm::VmError::Runtime(_, _)) => {
+        Err(vm::VmError::Runtime(error)) => {
             eprintln!("runtime error: {:?}", error);
             exit(70)
         }
