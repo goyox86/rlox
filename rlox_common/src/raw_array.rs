@@ -2,6 +2,7 @@ use std::{
     alloc::{alloc_zeroed, dealloc, Layout},
     fmt::Debug,
     marker::PhantomData,
+    mem::swap,
     ptr::{self, NonNull},
     slice,
 };
@@ -104,34 +105,18 @@ impl<T> RawArray<T> {
             return;
         }
 
-        let old_ptr = self.ptr;
-        let old_layout = self.layout_for(self.capacity);
-        let old_capacity = self.capacity;
-        self.capacity = new_capacity.unwrap_or_else(|| self.grow_capacity());
-        let new_layout = self.layout_for(self.capacity);
+        let mut new_self: RawArray<T> =
+            RawArray::with_capacity(new_capacity.unwrap_or_else(|| self.grow_capacity()));
 
         unsafe {
-            // TODO: Check if there is a way of getting this without zeroing.
-            let new_ptr = alloc_zeroed(new_layout);
-            self.ptr = NonNull::new_unchecked(new_ptr.cast());
             ptr::copy(
-                old_ptr.as_ptr() as *const T,
-                self.ptr.as_ptr().cast(),
-                old_capacity,
+                self.as_ptr() as *const T,
+                new_self.ptr.as_ptr(),
+                self.capacity,
             );
-
-            if old_capacity > 0 {
-                dealloc(old_ptr.as_ptr().cast(), old_layout);
-            }
         }
-    }
 
-    #[inline]
-    pub fn remove(&mut self, index: usize) -> Option<T> {
-        unsafe {
-            let value: T = ptr::read(self.as_ptr().add(index));
-            Some(value)
-        }
+        swap(self, &mut new_self);
     }
 }
 

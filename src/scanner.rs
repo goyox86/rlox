@@ -203,26 +203,26 @@ impl<'source> Scanner<'source> {
         self.make_token(TokenKind::Comment)
     }
 
-    pub fn scan_token(&mut self) -> Token<'source> {
+    pub fn scan_token(&mut self) -> Result<Token<'source>, ScannerError> {
         self.skip_whitespace();
 
         self.start = self.current;
 
         if self.is_at_end() {
-            return Token::new(TokenKind::Eof, self.line, self.start, None);
+            return Ok(Token::new(TokenKind::Eof, self.line, self.start, None));
         }
 
         let c = self.advance().unwrap();
 
         if self.is_alpha(c) {
-            return self.identifier();
+            return Ok(self.identifier());
         }
 
         if c.is_ascii_digit() {
-            return self.number();
+            return Ok(self.number());
         }
 
-        match c {
+        let result = match c {
             '(' => self.make_token(TokenKind::LeftParen),
             ')' => self.make_token(TokenKind::RightParen),
             '{' => self.make_token(TokenKind::LeftBrace),
@@ -268,9 +268,11 @@ impl<'source> Scanner<'source> {
                     self.make_token(TokenKind::Greater)
                 }
             }
-            '"' => self.string(),
+            '"' => self.string()?,
             _ => unreachable!(),
-        }
+        };
+
+        Ok(result)
     }
 
     pub fn make_token(&mut self, kind: TokenKind) -> Token<'source> {
@@ -279,7 +281,7 @@ impl<'source> Scanner<'source> {
         Token::new(kind, self.line, self.start, Some(lexeme))
     }
 
-    fn string(&mut self) -> Token<'source> {
+    fn string(&mut self) -> Result<Token<'source>, ScannerError> {
         while let Some(c) = self.peek() {
             if c == '\"' {
                 break;
@@ -292,10 +294,13 @@ impl<'source> Scanner<'source> {
         }
 
         if self.advance().is_none() {
-            panic!("unterminated string literal");
+            return Err(ScannerError {
+                msg: "unterminated string literal".into(),
+                line: self.line,
+            });
         }
 
-        self.make_token(TokenKind::String)
+        Ok(self.make_token(TokenKind::String))
     }
 
     fn number(&mut self) -> Token<'source> {
@@ -413,11 +418,27 @@ impl<'source> Iterator for Scanner<'source> {
     type Item = Token<'source>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let token = self.scan_token();
+        let token = self.scan_token().unwrap();
         match token.kind() {
             TokenKind::Eof => None,
             _ => Some(token),
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ScannerError {
+    msg: String,
+    line: usize,
+}
+
+impl ScannerError {
+    pub fn msg(&self) -> &str {
+        &self.msg
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
     }
 }
 
@@ -583,11 +604,11 @@ mod tests {
     fn scan_token_comment_and_newlines() {
         let mut scanner = Scanner::new("//this should all be ignored\n//so should this\n\n\n");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!("//this should all be ignored", token.lexeme().unwrap());
         assert_eq!(false, scanner.is_at_end());
         assert_eq!(1, scanner.line());
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!("//so should this", token.lexeme().unwrap());
         assert_eq!(false, scanner.is_at_end());
         assert_eq!(2, scanner.line());
@@ -625,140 +646,143 @@ mod tests {
     fn scan_token_left_paren() {
         let mut scanner = Scanner::new("(");
 
-        assert_eq!(TokenKind::LeftParen, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::LeftParen, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_right_paren() {
         let mut scanner = Scanner::new(")");
 
-        assert_eq!(TokenKind::RightParen, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::RightParen, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_left_brace() {
         let mut scanner = Scanner::new("{");
 
-        assert_eq!(TokenKind::LeftBrace, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::LeftBrace, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_right_brace() {
         let mut scanner = Scanner::new("}");
 
-        assert_eq!(TokenKind::RightBrace, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::RightBrace, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_semicolon() {
         let mut scanner = Scanner::new(";");
 
-        assert_eq!(TokenKind::Semicolon, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Semicolon, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_comma() {
         let mut scanner = Scanner::new(",");
 
-        assert_eq!(TokenKind::Comma, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Comma, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_dot() {
         let mut scanner = Scanner::new(".");
 
-        assert_eq!(TokenKind::Dot, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Dot, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_minus() {
         let mut scanner = Scanner::new("-");
 
-        assert_eq!(TokenKind::Minus, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Minus, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_plus() {
         let mut scanner = Scanner::new("+");
 
-        assert_eq!(TokenKind::Plus, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Plus, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_slash() {
         let mut scanner = Scanner::new("/");
 
-        assert_eq!(TokenKind::Slash, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Slash, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_star() {
         let mut scanner = Scanner::new("*");
 
-        assert_eq!(TokenKind::Star, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Star, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_bang() {
         let mut scanner = Scanner::new("!");
 
-        assert_eq!(TokenKind::Bang, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Bang, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_bang_equal() {
         let mut scanner = Scanner::new("!=");
 
-        assert_eq!(TokenKind::BangEqual, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::BangEqual, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_equal() {
         let mut scanner = Scanner::new("=");
 
-        assert_eq!(TokenKind::Equal, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Equal, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_equal_equal() {
         let mut scanner = Scanner::new("==");
 
-        assert_eq!(TokenKind::EqualEqual, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::EqualEqual, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_greater() {
         let mut scanner = Scanner::new(">");
 
-        assert_eq!(TokenKind::Greater, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Greater, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_greater_equal() {
         let mut scanner = Scanner::new(">=");
 
-        assert_eq!(TokenKind::GreaterEqual, *scanner.scan_token().kind());
+        assert_eq!(
+            TokenKind::GreaterEqual,
+            *scanner.scan_token().unwrap().kind()
+        );
     }
 
     #[test]
     fn scan_token_less() {
         let mut scanner = Scanner::new("<");
 
-        assert_eq!(TokenKind::Less, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::Less, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_less_equal() {
         let mut scanner = Scanner::new("<=");
 
-        assert_eq!(TokenKind::LessEqual, *scanner.scan_token().kind());
+        assert_eq!(TokenKind::LessEqual, *scanner.scan_token().unwrap().kind());
     }
 
     #[test]
     fn scan_token_string() {
         let mut scanner = Scanner::new("\"this is a test string\"");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::String, *token.kind());
         assert_eq!("\"this is a test string\"", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -768,7 +792,7 @@ mod tests {
     fn scan_token_string_multiline() {
         let mut scanner = Scanner::new("\"this is a test string\n and this is the second line\"");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::String, *token.kind());
         assert_eq!(
             "\"this is a test string\n and this is the second line\"",
@@ -782,7 +806,7 @@ mod tests {
     fn scan_token_string_unterminated() {
         let mut scanner = Scanner::new("\"this is a test string");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(
             "\"this is an unterminated test string",
             token.lexeme().unwrap()
@@ -794,7 +818,7 @@ mod tests {
     fn scan_token_number_integer() {
         let mut scanner = Scanner::new("42");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Number, *token.kind());
         assert_eq!("42", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -804,7 +828,7 @@ mod tests {
     fn scan_token_number_float() {
         let mut scanner = Scanner::new("7.65");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Number, *token.kind());
         assert_eq!("7.65", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -814,7 +838,7 @@ mod tests {
     fn scan_token_id() {
         let mut scanner = Scanner::new("valid_name");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Identifier, *token.kind());
         assert_eq!("valid_name", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -824,7 +848,7 @@ mod tests {
     fn scan_token_id_underscore() {
         let mut scanner = Scanner::new("_also_valid_id");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Identifier, *token.kind());
         assert_eq!("_also_valid_id", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -834,7 +858,7 @@ mod tests {
     fn scan_token_id_kw_and() {
         let mut scanner = Scanner::new("and");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::And, *token.kind());
         assert_eq!("and", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -844,7 +868,7 @@ mod tests {
     fn scan_token_id_kw_class() {
         let mut scanner = Scanner::new("class");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Class, *token.kind());
         assert_eq!("class", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -854,7 +878,7 @@ mod tests {
     fn scan_token_id_kw_else() {
         let mut scanner = Scanner::new("else");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Else, *token.kind());
         assert_eq!("else", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -864,7 +888,7 @@ mod tests {
     fn scan_token_id_kw_false() {
         let mut scanner = Scanner::new("false");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::False, *token.kind());
         assert_eq!("false", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -874,7 +898,7 @@ mod tests {
     fn scan_token_id_kw_for() {
         let mut scanner = Scanner::new("for");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::For, *token.kind());
         assert_eq!("for", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -884,7 +908,7 @@ mod tests {
     fn scan_token_id_kw_fun() {
         let mut scanner = Scanner::new("fun");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Fun, *token.kind());
         assert_eq!("fun", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -894,7 +918,7 @@ mod tests {
     fn scan_token_id_kw_if() {
         let mut scanner = Scanner::new("if");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::If, *token.kind());
         assert_eq!("if", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -904,7 +928,7 @@ mod tests {
     fn scan_token_id_kw_nil() {
         let mut scanner = Scanner::new("nil");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Nil, *token.kind());
         assert_eq!("nil", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -914,7 +938,7 @@ mod tests {
     fn scan_token_id_kw_or() {
         let mut scanner = Scanner::new("or");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Or, *token.kind());
         assert_eq!("or", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -924,7 +948,7 @@ mod tests {
     fn scan_token_id_kw_print() {
         let mut scanner = Scanner::new("print");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Print, *token.kind());
         assert_eq!("print", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -934,7 +958,7 @@ mod tests {
     fn scan_token_id_kw_return() {
         let mut scanner = Scanner::new("return");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Return, *token.kind());
         assert_eq!("return", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -944,7 +968,7 @@ mod tests {
     fn scan_token_id_kw_super() {
         let mut scanner = Scanner::new("super");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Super, *token.kind());
         assert_eq!("super", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -954,7 +978,7 @@ mod tests {
     fn scan_token_id_kw_this() {
         let mut scanner = Scanner::new("this");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::This, *token.kind());
         assert_eq!("this", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -964,7 +988,7 @@ mod tests {
     fn scan_token_id_kw_true() {
         let mut scanner = Scanner::new("true");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::True, *token.kind());
         assert_eq!("true", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -974,7 +998,7 @@ mod tests {
     fn scan_token_id_kw_var() {
         let mut scanner = Scanner::new("var");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Var, *token.kind());
         assert_eq!("var", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -984,7 +1008,7 @@ mod tests {
     fn scan_token_id_kw_while() {
         let mut scanner = Scanner::new("while");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::While, *token.kind());
         assert_eq!("while", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());
@@ -994,7 +1018,7 @@ mod tests {
     fn scan_token_id_contains_but_not_exact() {
         let mut scanner = Scanner::new("variable");
 
-        let token = scanner.scan_token();
+        let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Identifier, *token.kind());
         assert_eq!("variable", token.lexeme().unwrap());
         assert_eq!(1, scanner.line());

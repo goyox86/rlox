@@ -6,7 +6,7 @@ use strum::FromRepr;
 use crate::{
     bytecode::{Chunk, Disassembler, OpCode},
     object::Object,
-    scanner::{Scanner, Token, TokenKind},
+    scanner::{Scanner, ScannerError, Token, TokenKind},
     string::String,
     value::Value,
     vm::{self, Vm},
@@ -441,16 +441,17 @@ fn synchronize(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
             return Ok(());
         }
 
-        advance(ctx)
+        advance(ctx)?;
     }
 
     Ok(())
 }
 
 #[inline]
-fn advance(ctx: &mut CompilerCtx) {
+fn advance(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     ctx.previous = ctx.current;
-    ctx.current = ctx.scanner.scan_token();
+    ctx.current = ctx.scanner.scan_token()?;
+    Ok(())
 }
 
 #[inline]
@@ -564,6 +565,15 @@ impl CompilerError {
 
     pub fn line(&self) -> usize {
         self.line
+    }
+}
+
+impl From<ScannerError> for CompilerError {
+    fn from(scanner_error: ScannerError) -> Self {
+        Self {
+            msg: scanner_error.msg().to_owned(),
+            line: scanner_error.line(),
+        }
     }
 }
 

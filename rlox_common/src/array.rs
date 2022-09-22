@@ -29,6 +29,7 @@ impl<T> Array<T> {
         self.count += 1;
     }
 
+    #[inline]
     pub fn write(&mut self, value: T) {
         self.push(value)
     }
