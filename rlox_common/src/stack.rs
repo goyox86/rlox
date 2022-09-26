@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::ops::Deref;
+use std::ops::DerefMut;
 
 #[derive(Debug)]
 pub struct Stack<T>(Vec<T>);
@@ -51,6 +53,20 @@ impl<T: Debug + Display> Display for Stack<T> {
 impl<T> Default for Stack<T> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<T> Deref for Stack<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for Stack<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

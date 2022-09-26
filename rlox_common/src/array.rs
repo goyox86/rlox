@@ -64,7 +64,7 @@ impl<T> Array<T> {
     #[inline]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.len() {
-            unsafe { Some(&*self.buf.as_ptr().add(index)) }
+            unsafe { Some(self.get_unchecked(index)) }
         } else {
             None
         }
@@ -78,10 +78,18 @@ impl<T> Array<T> {
         &*self.as_ptr().add(index)
     }
 
+    /// # Safety
+    ///
+    /// If you provide an index beyond self.len you are own your own.
+    #[inline]
+    pub unsafe fn get_unchecked_mut<'a>(&self, index: usize) -> &'a mut T {
+        &mut *self.as_ptr().add(index)
+    }
+
     #[inline]
     pub fn get_mut<'a>(&mut self, index: usize) -> Option<&'a mut T> {
         if index < self.len() {
-            unsafe { Some(&mut *self.as_ptr().add(index)) }
+            unsafe { Some(self.get_unchecked_mut(index)) }
         } else {
             None
         }
