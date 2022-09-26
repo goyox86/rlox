@@ -71,12 +71,18 @@ impl TokenKind {
     }
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, Eq)]
 pub(crate) struct Token<'source> {
     pub kind: TokenKind,
     pub line: usize,
     pub start: usize,
     lexeme: Option<&'source str>,
+}
+
+impl<'source> PartialEq for Token<'source> {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.lexeme == other.lexeme
+    }
 }
 
 impl<'source> Token<'source> {

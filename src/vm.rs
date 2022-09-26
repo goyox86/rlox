@@ -365,6 +365,14 @@ fn run(vm: &mut Vm) -> InterpretResult {
                     return vm.runtime_error(&format!("undefined variable '{}'", name));
                 }
             }
+            OpCode::GetLocal => {
+                let slot = vm.read_byte();
+                vm.push(vm.stack[slot as usize].clone());
+            }
+            OpCode::SetLocal => {
+                let slot = vm.read_byte();
+                vm.stack[slot as usize] = vm.peek(0)?;
+            }
         }
     }
 }

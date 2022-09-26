@@ -65,6 +65,8 @@ pub(crate) enum OpCode {
     DefineGlobal,
     GetGlobal,
     SetGlobal,
+    GetLocal,
+    SetLocal,
 }
 
 #[derive(Debug)]
@@ -133,6 +135,8 @@ impl<'d> Disassembler<'d> {
             OpCode::DefineGlobal => self.constant_instruction("OP_DEFINE_GLOBAL", offset, output),
             OpCode::GetGlobal => self.constant_instruction("OP_GET_GLOBAL", offset, output),
             OpCode::SetGlobal => self.constant_instruction("OP_SET_GLOBAL", offset, output),
+            OpCode::GetLocal => self.byte_instruction("OP_GET_LOCAL", offset, output),
+            OpCode::SetLocal => self.byte_instruction("OP_SET_LOCAL", offset, output),
             _ => unreachable!(),
         };
 
@@ -152,6 +156,13 @@ impl<'d> Disassembler<'d> {
             "{:<16} {:<4} '{}'",
             name, constant, &self.chunk.constants[constant as usize]
         );
+        offset + 2
+    }
+
+    pub fn byte_instruction(&self, name: &str, offset: usize, output: &mut String) -> usize {
+        let slot = self.chunk.code[offset + 1];
+
+        writeln!(output, "{:<16} {:<4}", name, slot);
         offset + 2
     }
 }
