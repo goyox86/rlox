@@ -19,6 +19,13 @@ impl<T> Array<T> {
         }
     }
 
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            count: 0,
+            buf: RawArray::with_capacity(capacity),
+        }
+    }
+
     #[inline]
     pub fn push(&mut self, value: T) {
         if self.needs_to_grow() {

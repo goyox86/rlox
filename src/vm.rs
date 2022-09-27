@@ -181,7 +181,7 @@ impl Vm {
         match self.stack.peek(distance) {
             Some(value) => Ok(value.clone()),
             None => Err(RuntimeError {
-                msg: format!("no value at distance: {} in the stack", distance),
+                msg: format!("no value at distance: {} in the stack.", distance),
                 line: self.current_line(),
             }),
         }
@@ -196,7 +196,7 @@ impl Vm {
     fn current_instruction_offset(&self) -> usize {
         unsafe {
             self.ip
-                .offset_from(self.chunk.as_ref().expect("chunk expected here").ptr())
+                .offset_from(self.chunk.as_ref().expect("chunk expected here.").ptr())
                 as usize
         }
     }
@@ -233,10 +233,10 @@ impl Vm {
     fn check_both_number(&mut self) -> InterpretResult {
         if let (Some(left), Some(right)) = (self.stack.peek(1), self.stack.peek(0)) {
             if !left.is_number() || !right.is_number() {
-                return self.runtime_error("operand must be a number");
+                return self.runtime_error("operand must be a number.");
             }
         } else {
-            return self.runtime_error("missing operand");
+            return self.runtime_error("missing operand.");
         }
 
         Ok(())
@@ -245,7 +245,7 @@ impl Vm {
     #[inline]
     fn check_number(&mut self) -> InterpretResult {
         if !self.stack.peek(0).unwrap().is_number() {
-            return self.runtime_error("operand must be a number");
+            return self.runtime_error("operand must be a number.");
         }
 
         Ok(())
@@ -282,7 +282,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
 
         let byte: u8 = vm.read_byte();
         let opcode: OpCode =
-            OpCode::from_repr(byte).expect("internal error: cannot decode instruction");
+            OpCode::from_repr(byte).expect("internal error: cannot decode instruction.");
 
         match opcode {
             OpCode::Return => return Ok(()),
@@ -352,17 +352,15 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let name = vm.read_string();
                 match vm.globals.get(&name) {
                     Some(value) => vm.push(value.clone()),
-                    None => return vm.runtime_error(&format!("undefined variable '{}'", name)),
+                    None => return vm.runtime_error(&format!("undefined variable '{}'.", name)),
                 };
             }
             OpCode::SetGlobal => {
                 let name = vm.read_string();
-
                 let value = vm.peek(0)?;
-                let new_key = vm.globals.insert(name.clone(), value);
-                if new_key {
+                if vm.globals.insert(name.clone(), value) {
                     vm.globals.remove(&name);
-                    return vm.runtime_error(&format!("undefined variable '{}'", name));
+                    return vm.runtime_error(&format!("undefined variable '{}'.", name));
                 }
             }
             OpCode::GetLocal => {
@@ -386,6 +384,6 @@ fn op_add(vm: &mut Vm) -> Result<(), VmError> {
         vm.push(left + right);
         Ok(())
     } else {
-        vm.runtime_error("operands must be two numbers of two strings")
+        vm.runtime_error("operands must be two numbers of two strings.")
     }
 }

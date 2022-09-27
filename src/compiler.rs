@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use rlox_common::Array;
 use rustc_hash::FxHashMap;
 use strum::FromRepr;
 
@@ -85,6 +86,12 @@ pub(crate) struct Local<'l> {
     depth: isize,
 }
 
+impl<'l> Local<'l> {
+    fn new(name: Token<'l>, depth: isize) -> Self {
+        Self { name, depth }
+    }
+}
+
 impl<'l> Default for Local<'l> {
     fn default() -> Self {
         Self {
@@ -105,7 +112,7 @@ pub(crate) struct CompilerCtx<'source> {
     options: Option<&'source CompilerOptions>,
     local_count: isize,
     scope_depth: isize,
-    locals: [Local<'source>; u8::MAX as usize],
+    locals: Array<Local<'source>>,
 }
 
 impl<'source> CompilerCtx<'source> {
@@ -121,7 +128,7 @@ impl<'source> CompilerCtx<'source> {
             parse_rules: Self::create_parse_rules(),
             local_count: 0,
             scope_depth: 0,
-            locals: [Local::default(); u8::MAX as usize],
+            locals: Array::new(),
         }
     }
 
@@ -523,18 +530,9 @@ fn identifier_constant(ctx: &mut CompilerCtx, token: Token) -> u8 {
 }
 
 fn add_local<'ctx>(ctx: &mut CompilerCtx<'ctx>, name: Token<'ctx>) -> Result<(), CompilerError> {
-    if ctx.local_count == u8::MAX as isize + 1 {
-        return Err(CompilerError {
-            msg: "too many variables in function.".into(),
-            line: ctx.current.line,
-        });
-    }
-
     ctx.local_count += 1;
-    let local = &mut ctx.locals[ctx.local_count as usize - 1];
-    local.name = name;
-    // -1 means uninitialized;
-    local.depth = -1;
+    let local = Local::new(name, -1);
+    ctx.locals.push(local);
 
     Ok(())
 }
@@ -813,20 +811,27 @@ mod tests {
     }
 
     #[test]
-    fn too_many_locals_error() {
+    fn already_defined_local_error() {
         let compiler = Compiler::new(None);
 
         let expected_error = Err(CompilerError {
-            msg: "too many variables in function.".into(),
+            msg: "already a variable with this name in this scope.".into(),
             line: 1,
         });
+        assert_eq!(
+            expected_error,
+            compiler.compile("{ var a = \"foo\"; var a = \"bar\"; }")
+        );
+    }
 
-        let mut source = std::string::String::new();
-        source.push_str("{\n");
-        for i in 1..u8::MAX as usize + 10 {
-            source.push_str(&format!("var var_{} = {};", i, i));
-        }
-        source.push_str("}");
-        assert_eq!(expected_error, compiler.compile(&source));
+    #[test]
+    fn using_itself_in_initializer_error() {
+        let compiler = Compiler::new(None);
+
+        let expected_error = Err(CompilerError {
+            msg: "already a variable with this name in this scope.".into(),
+            line: 1,
+        });
+        assert_eq!(expected_error, compiler.compile("{ var a = a; }"));
     }
 }

@@ -1,9 +1,14 @@
 var global = 1;
 {
-
-var a = "foo";
-var b = "bar";
-print a;
-print b;
-print global;
+  var a = "foo";
+  var b = "bar";
+  print a;
+  print b;
+  print global;
+  {
+    var inner = "inner";
+    a = "bar";
+    print inner;
+    print a;
+  }
 }

@@ -61,13 +61,14 @@ fn run_file(file_path: &Path, vm_opts: Option<vm::VmOptions>) -> std::io::Result
 
     match result {
         Ok(_) => exit(0),
-        Err(vm::VmError::Compile(error)) => {
-            eprintln!("compile error: {:?}", error);
-            exit(65)
-        }
-        Err(vm::VmError::Runtime(error)) => {
-            eprintln!("runtime error: {:?}", error);
-            exit(70)
+        Err(error) => {
+            eprintln!("{}", error);
+            let exit_code = match error {
+                vm::VmError::Compile(_) => 65,
+                vm::VmError::Runtime(_) => 70,
+            };
+
+            exit(exit_code);
         }
     }
 }
@@ -79,7 +80,12 @@ fn repl(vm_opts: Option<vm::VmOptions>) -> std::io::Result<()> {
     print!("> ");
     std::io::stdout().flush()?;
     for line in stdin.lock().lines() {
-        vm.interpret(line?).err().map(|err| print!("{}\n", err));
+        let line = line?;
+        if line == "quit" {
+            exit(0);
+        }
+
+        vm.interpret(line).err().map(|err| print!("{}\n", err));
         print!("> ");
         std::io::stdout().flush()?;
     }
