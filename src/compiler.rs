@@ -80,7 +80,7 @@ pub(crate) struct Compiler<'c> {
     options: Option<&'c CompilerOptions>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct Local<'l> {
     name: Token<'l>,
     depth: isize,
@@ -387,7 +387,7 @@ fn literal(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError>
 }
 
 fn variable(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
-    named_variable(ctx, ctx.previous, can_assign);
+    named_variable(ctx, ctx.previous, can_assign)?;
 
     Ok(())
 }
@@ -829,7 +829,7 @@ mod tests {
         let compiler = Compiler::new(None);
 
         let expected_error = Err(CompilerError {
-            msg: "already a variable with this name in this scope.".into(),
+            msg: "can't read local variable in its own initializer.".into(),
             line: 1,
         });
         assert_eq!(expected_error, compiler.compile("{ var a = a; }"));
