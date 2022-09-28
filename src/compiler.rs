@@ -71,7 +71,7 @@ impl Precedence {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub(crate) struct CompilerOptions {
     pub print_code: bool,
 }
@@ -412,6 +412,7 @@ fn named_variable(
     } else {
         emit_bytes(ctx, get_op, arg as u8);
     }
+
     Ok(())
 }
 

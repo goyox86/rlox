@@ -41,6 +41,10 @@ impl Chunk {
     pub fn start(&self) -> *mut u8 {
         self.ptr()
     }
+
+    pub fn len(&self) -> usize {
+        self.code.len()
+    }
 }
 
 #[derive(FromRepr, Debug, PartialEq)]
@@ -73,96 +77,111 @@ pub(crate) enum OpCode {
 pub(crate) struct Disassembler<'d> {
     chunk: &'d Chunk,
     name: &'d str,
+    offset: usize,
+    output: String,
 }
 
 /// A bytecode disassembler.
 ///
 /// Takes a Chunk as an input and disassembles the bytecode into a human readable format.
 impl<'d> Disassembler<'d> {
-    pub(crate) fn new(chunk: &'d Chunk, name: &'d str) -> Self {
-        Self { chunk, name }
+    pub fn new(chunk: &'d Chunk, name: &'d str) -> Self {
+        Self {
+            chunk,
+            name,
+            offset: 0,
+            output: String::new(),
+        }
     }
 
-    pub fn disassemble(&self) -> String {
-        println!("== {} ==", self.name);
+    pub fn disassemble(&mut self) -> &str {
+        writeln!(self.output, "== {} ==", self.name);
 
-        let mut output = String::new();
-        let mut offset: usize = 0;
-        while offset < self.chunk.code.len() {
-            (offset, _) = self.disassemble_instruction(offset, &mut output);
+        while self.offset < self.chunk.code.len() {
+            self.disassemble_current_instruction();
         }
 
-        output
+        &self.output
     }
 
-    pub(crate) fn disassemble_chunk(chunk: &'d Chunk, name: &'d str) -> String {
-        Self::new(chunk, name).disassemble()
+    pub fn disassemble_chunk(chunk: &'d Chunk, name: &'d str) -> String {
+        Self::new(chunk, name).disassemble().to_string()
     }
 
-    pub fn disassemble_instruction<'output>(
-        &self,
-        offset: usize,
-        output: &'output mut String,
-    ) -> (usize, &'output String) {
-        write!(output, "{:0<4} ", offset);
+    pub fn disassemble_instruction(&mut self, offset: usize) -> String {
+        // This is so we can keep using the instance after we have called this function.
+        let old_offset = self.offset;
+        self.move_current_instruction(offset);
+        let result = self.disassemble_current_instruction().to_owned();
+        self.offset = old_offset;
+        result
+    }
 
-        if offset > 0 && self.chunk.lines[offset] == self.chunk.lines[offset - 1] {
-            write!(output, "   | ");
+    fn disassemble_current_instruction(&mut self) -> &str {
+        write!(self.output, "{:0<4} ", self.offset);
+
+        if self.offset > 0 && self.chunk.lines[self.offset] == self.chunk.lines[self.offset - 1] {
+            write!(self.output, "   | ");
         } else {
-            write!(output, "{:0>4} ", self.chunk.lines[offset]);
+            write!(self.output, "{:0>4} ", self.chunk.lines[self.offset]);
         }
 
         let opcode: OpCode =
-            OpCode::from_repr(self.chunk.code[offset]).expect("error fetching opcode");
+            OpCode::from_repr(self.chunk.code[self.offset]).expect("error fetching opcode");
 
-        let offset = match opcode {
-            OpCode::Return => self.simple_instruction("OP_RETURN", offset, output),
-            OpCode::AddConstant => self.constant_instruction("OP_CONSTANT", offset, output),
-            OpCode::AddNil => self.constant_instruction("OP_NIL", offset, output),
-            OpCode::AddTrue => self.constant_instruction("OP_TRUE", offset, output),
-            OpCode::AddFalse => self.constant_instruction("OP_FALSE", offset, output),
-            OpCode::Equal => self.constant_instruction("OP_EQUAL", offset, output),
-            OpCode::Greater => self.constant_instruction("OP_GREATER", offset, output),
-            OpCode::Less => self.constant_instruction("OP_LESS", offset, output),
-            OpCode::Negate => self.simple_instruction("OP_NEGATE", offset, output),
-            OpCode::Add => self.simple_instruction("OP_ADD", offset, output),
-            OpCode::Substract => self.simple_instruction("OP_SUBSTRACT", offset, output),
-            OpCode::Multiply => self.simple_instruction("OP_MULTIPLY", offset, output),
-            OpCode::Divide => self.simple_instruction("OP_DIVIDE", offset, output),
-            OpCode::Not => self.simple_instruction("OP_NOT", offset, output),
-            OpCode::Print => self.simple_instruction("OP_PRINT", offset, output),
-            OpCode::Pop => self.simple_instruction("OP_POP", offset, output),
-            OpCode::DefineGlobal => self.constant_instruction("OP_DEFINE_GLOBAL", offset, output),
-            OpCode::GetGlobal => self.constant_instruction("OP_GET_GLOBAL", offset, output),
-            OpCode::SetGlobal => self.constant_instruction("OP_SET_GLOBAL", offset, output),
-            OpCode::GetLocal => self.byte_instruction("OP_GET_LOCAL", offset, output),
-            OpCode::SetLocal => self.byte_instruction("OP_SET_LOCAL", offset, output),
+        match opcode {
+            OpCode::Return => self.simple_instruction("OP_RETURN"),
+            OpCode::AddConstant => self.constant_instruction("OP_CONSTANT"),
+            OpCode::AddNil => self.constant_instruction("OP_NIL"),
+            OpCode::AddTrue => self.constant_instruction("OP_TRUE"),
+            OpCode::AddFalse => self.constant_instruction("OP_FALSE"),
+            OpCode::Equal => self.constant_instruction("OP_EQUAL"),
+            OpCode::Greater => self.constant_instruction("OP_GREATER"),
+            OpCode::Less => self.constant_instruction("OP_LESS"),
+            OpCode::Negate => self.simple_instruction("OP_NEGATE"),
+            OpCode::Add => self.simple_instruction("OP_ADD"),
+            OpCode::Substract => self.simple_instruction("OP_SUBSTRACT"),
+            OpCode::Multiply => self.simple_instruction("OP_MULTIPLY"),
+            OpCode::Divide => self.simple_instruction("OP_DIVIDE"),
+            OpCode::Not => self.simple_instruction("OP_NOT"),
+            OpCode::Print => self.simple_instruction("OP_PRINT"),
+            OpCode::Pop => self.simple_instruction("OP_POP"),
+            OpCode::DefineGlobal => self.constant_instruction("OP_DEFINE_GLOBAL"),
+            OpCode::GetGlobal => self.constant_instruction("OP_GET_GLOBAL"),
+            OpCode::SetGlobal => self.constant_instruction("OP_SET_GLOBAL"),
+            OpCode::GetLocal => self.byte_instruction("OP_GET_LOCAL"),
+            OpCode::SetLocal => self.byte_instruction("OP_SET_LOCAL"),
             _ => unreachable!(),
         };
 
-        (offset, output)
+        &self.output
     }
 
-    fn simple_instruction(&self, name: &str, offset: usize, output: &mut String) -> usize {
-        writeln!(output, "{}", name);
-        offset + 1
+    fn simple_instruction(&mut self, name: &str) {
+        writeln!(self.output, "{}", name);
+        self.offset += 1;
     }
 
-    fn constant_instruction(&self, name: &str, offset: usize, output: &mut String) -> usize {
-        let constant = self.chunk.code[offset + 1];
+    fn constant_instruction(&mut self, name: &str) {
+        let constant = self.chunk.code[self.offset + 1];
 
         writeln!(
-            output,
+            self.output,
             "{:<16} {:<4} '{}'",
             name, constant, &self.chunk.constants[constant as usize]
         );
-        offset + 2
+        self.offset += 2;
     }
 
-    pub fn byte_instruction(&self, name: &str, offset: usize, output: &mut String) -> usize {
-        let slot = self.chunk.code[offset + 1];
+    fn byte_instruction(&mut self, name: &str) {
+        let slot = self.chunk.code[self.offset + 1];
 
-        writeln!(output, "{:<16} {:<4}", name, slot);
-        offset + 2
+        writeln!(self.output, "{:<16} {:<4}", name, slot);
+        self.offset += 2;
+    }
+
+    fn move_current_instruction(&mut self, offset: usize) {
+        assert!(offset < self.chunk.len(), "offset out of bounds.");
+        self.offset = offset;
     }
 }

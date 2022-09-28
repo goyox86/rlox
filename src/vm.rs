@@ -131,7 +131,7 @@ impl Vm {
 
     pub fn compile(&mut self) -> Result<Chunk, VmError> {
         let source = self.source.as_ref().unwrap().clone();
-        let mut compiler = Compiler::new(None);
+        let mut compiler = Compiler::new(Some(&self.options.compiler));
         let chunk = compiler.compile(&source)?;
 
         Ok(chunk)
@@ -220,11 +220,11 @@ impl Vm {
     }
 
     fn dissasemble_current_instruction(&mut self) {
-        let dissasembler = Disassembler::new(self.chunk.as_ref().unwrap(), "chunk");
+        let mut dissasembler = Disassembler::new(self.chunk.as_ref().unwrap(), "chunk");
         let mut output = String::new();
 
-        let (_, disassembled_instruction) =
-            dissasembler.disassemble_instruction(self.current_instruction_offset(), &mut output);
+        let disassembled_instruction =
+            dissasembler.disassemble_instruction(self.current_instruction_offset());
 
         print!("{}", disassembled_instruction)
     }
