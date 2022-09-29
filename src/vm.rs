@@ -30,7 +30,7 @@ pub fn strings() -> &'static Mutex<HashMap<LoxString, ManagedPtr<Object>>> {
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum VmError {
     Compile(CompilerError),
     Runtime(RuntimeError),
@@ -57,7 +57,7 @@ impl From<RuntimeError> for VmError {
     }
 }
 
-type InterpretResult = result::Result<(), VmError>;
+type InterpretResult = result::Result<Value, VmError>;
 
 impl Display for VmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -103,6 +103,7 @@ pub(crate) struct Vm {
     options: VmOptions,
     stack: Stack<Value>,
     globals: HashMap<LoxString, Value>,
+    last: Value,
 }
 
 impl Vm {
@@ -116,6 +117,7 @@ impl Vm {
             options,
             source: None,
             globals: HashMap::new(),
+            last: Value::Nil,
         }
     }
 
@@ -173,7 +175,9 @@ impl Vm {
 
     #[inline]
     fn pop(&mut self) -> Value {
-        self.stack.pop().expect("empty stack")
+        let value = self.stack.pop().expect("empty stack");
+        self.last = value;
+        value
     }
 
     #[inline]
@@ -230,7 +234,7 @@ impl Vm {
     }
 
     #[inline]
-    fn check_both_number(&mut self) -> InterpretResult {
+    fn check_both_number(&mut self) -> Result<(), RuntimeError> {
         if let (Some(left), Some(right)) = (self.stack.peek(1), self.stack.peek(0)) {
             if !left.is_number() || !right.is_number() {
                 return self.runtime_error("operand must be a number.");
@@ -243,7 +247,7 @@ impl Vm {
     }
 
     #[inline]
-    fn check_number(&mut self) -> InterpretResult {
+    fn check_number(&mut self) -> Result<(), RuntimeError> {
         if !self.stack.peek(0).unwrap().is_number() {
             return self.runtime_error("operand must be a number.");
         }
@@ -251,7 +255,7 @@ impl Vm {
         Ok(())
     }
 
-    fn runtime_error(&mut self, message: &str) -> InterpretResult {
+    fn vm_error(&mut self, message: &str) -> InterpretResult {
         let instruction = self.current_instruction_offset();
 
         self.reset_stack();
@@ -260,6 +264,17 @@ impl Vm {
             message,
             self.chunk.as_ref().unwrap().lines[instruction],
         ))
+    }
+
+    fn runtime_error(&mut self, message: &str) -> Result<(), RuntimeError> {
+        let instruction = self.current_instruction_offset();
+
+        self.reset_stack();
+
+        Err(RuntimeError {
+            msg: message.to_string(),
+            line: self.chunk.as_ref().unwrap().lines[instruction],
+        })
     }
 }
 
@@ -285,7 +300,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
             OpCode::from_repr(byte).expect("internal error: cannot decode instruction.");
 
         match opcode {
-            OpCode::Return => return Ok(()),
+            OpCode::Return => return Ok(vm.last),
             OpCode::AddConstant => {
                 let constant = vm.read_constant();
                 vm.push(constant);
@@ -352,7 +367,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let name = vm.read_string();
                 match vm.globals.get(&name) {
                     Some(value) => vm.push(value.clone()),
-                    None => return vm.runtime_error(&format!("undefined variable '{}'.", name)),
+                    None => return vm.vm_error(&format!("undefined variable '{}'.", name)),
                 };
             }
             OpCode::SetGlobal => {
@@ -360,7 +375,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let value = vm.peek(0)?;
                 if vm.globals.insert(name.clone(), value) {
                     vm.globals.remove(&name);
-                    return vm.runtime_error(&format!("undefined variable '{}'.", name));
+                    return vm.vm_error(&format!("undefined variable '{}'.", name));
                 }
             }
             OpCode::GetLocal => {
@@ -376,7 +391,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
 }
 
 #[inline(always)]
-fn op_add(vm: &mut Vm) -> Result<(), VmError> {
+fn op_add(vm: &mut Vm) -> Result<(), RuntimeError> {
     let (left, right) = (vm.peek(1)?, vm.peek(0)?);
     if (left.is_number() && right.is_number()) || (left.is_string() && right.is_string()) {
         let right = vm.pop();
@@ -385,5 +400,64 @@ fn op_add(vm: &mut Vm) -> Result<(), VmError> {
         Ok(())
     } else {
         vm.runtime_error("operands must be two numbers of two strings.")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn op_add_two_numbers() {
+        let mut vm = Vm::new(None);
+        assert_eq!(
+            Value::from(2.0),
+            vm.interpret("1 + 1;".to_string()).unwrap()
+        );
+    }
+
+    // #[test]
+    // fn op_add_two_strings() {
+    //     let mut vm = Vm::new(None);
+    //     assert_eq!(
+    //         Value::from("hello world!"),
+    //         vm.interpret("\"hello\" + \"world!\";".to_string()).unwrap()
+    //     );
+    // }
+
+    #[test]
+    fn op_add_type_both_number_error() {
+        let mut vm = Vm::new(None);
+
+        let expected_error = Err(VmError::Runtime(RuntimeError {
+            msg: "operands must be two numbers of two strings.".into(),
+            line: 1,
+        }));
+
+        assert_eq!(expected_error, vm.interpret("1 + \"1\";".to_string()));
+    }
+
+    #[test]
+    fn op_add_type_both_number_error_2() {
+        let mut vm = Vm::new(None);
+
+        let expected_error = Err(VmError::Runtime(RuntimeError {
+            msg: "operands must be two numbers of two strings.".into(),
+            line: 1,
+        }));
+
+        assert_eq!(expected_error, vm.interpret("1 + nil;".to_string()));
+    }
+
+    #[test]
+    fn undefinded_local_error() {
+        let mut vm = Vm::new(None);
+
+        let expected_error = Err(VmError::Runtime(RuntimeError {
+            msg: "undefined variable 'a'.".into(),
+            line: 1,
+        }));
+
+        assert_eq!(expected_error, vm.interpret("{ print a; }".to_string()));
     }
 }

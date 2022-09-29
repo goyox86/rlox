@@ -26,9 +26,11 @@ where
 
     pub fn with_capacity(capacity: usize) -> Self {
         let mut entries: RawArray<Entry<K, V>> = RawArray::with_capacity(capacity);
+        // We need all entries by default to be Entry::Vacant.
         entries.as_mut_slice().iter_mut().for_each(|entry| {
             unsafe { ptr::write(entry, Entry::Vacant) };
         });
+
         Self { entries }
     }
 
@@ -251,8 +253,8 @@ where
         } else {
             self.capacity() * 2
         };
-        let mut new_inner: HashMapInner<K, V> = HashMapInner::with_capacity(new_capacity);
 
+        let mut new_inner: HashMapInner<K, V> = HashMapInner::with_capacity(new_capacity);
         let mut new_len = 0;
         for entry in self.inner.entries.as_slice() {
             match entry {

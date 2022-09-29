@@ -10,7 +10,7 @@ use crate::object::{ManagedPtr, Object};
 use crate::string::String;
 use crate::vm;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
@@ -206,5 +206,11 @@ impl From<f64> for Value {
 impl From<bool> for Value {
     fn from(inner: bool) -> Self {
         Self::Boolean(inner)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(inner: &str) -> Self {
+        Self::from_string(String::new(inner))
     }
 }
