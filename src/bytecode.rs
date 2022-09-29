@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 use strum::FromRepr;
 
@@ -29,13 +29,13 @@ impl Chunk {
         self.lines.write(line);
     }
 
-    pub fn ptr(&self) -> *mut u8 {
-        self.code.as_ptr()
-    }
-
     pub fn add_constant(&mut self, value: Value) -> usize {
         self.constants.write(value);
         self.constants.len() - 1
+    }
+
+    pub fn ptr(&self) -> *mut u8 {
+        self.code.as_ptr()
     }
 
     pub fn start(&self) -> *mut u8 {
@@ -71,6 +71,36 @@ pub(crate) enum OpCode {
     SetGlobal,
     GetLocal,
     SetLocal,
+}
+
+impl Display for OpCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let me_str = match self {
+            OpCode::Return => "OP_RETURN",
+            OpCode::AddConstant => "OP_CONSTANT",
+            OpCode::AddNil => "OP_NIL",
+            OpCode::AddTrue => "OP_TRUE",
+            OpCode::AddFalse => "OP_FALSE",
+            OpCode::Equal => "OP_EQUAL",
+            OpCode::Greater => "OP_GREATER",
+            OpCode::Less => "OP_LESS",
+            OpCode::Negate => "OP_NEGATE",
+            OpCode::Add => "OP_ADD",
+            OpCode::Substract => "OP_SUBSTRACT",
+            OpCode::Multiply => "OP_MULTIPLY",
+            OpCode::Divide => "OP_DIVIDE",
+            OpCode::Not => "OP_NOT",
+            OpCode::Print => "OP_PRINT",
+            OpCode::Pop => "OP_POP",
+            OpCode::DefineGlobal => "OP_DEFINE_GLOBAL",
+            OpCode::GetGlobal => "OP_GET_GLOBAL",
+            OpCode::SetGlobal => "OP_SET_GLOBAL",
+            OpCode::GetLocal => "OP_GET_LOCAL",
+            OpCode::SetLocal => "OP_SET_LOCAL",
+        };
+
+        write!(f, "{}", me_str)
+    }
 }
 
 #[derive(Debug)]

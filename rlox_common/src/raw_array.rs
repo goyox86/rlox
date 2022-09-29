@@ -32,17 +32,13 @@ impl<T> RawArray<T> {
             let new_ptr = alloc_zeroed(layout);
             me.ptr = NonNull::new_unchecked(new_ptr.cast())
         }
+
         me.capacity = capacity;
         me
     }
 
     #[inline]
     pub fn as_ptr(&self) -> *mut T {
-        self.ptr.as_ptr()
-    }
-
-    #[inline]
-    pub fn as_mut_ptr(&mut self) -> *mut T {
         self.ptr.as_ptr()
     }
 

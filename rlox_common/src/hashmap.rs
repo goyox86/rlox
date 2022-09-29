@@ -6,14 +6,14 @@ use crate::raw_array::RawArray;
 
 const MAX_LOAD: f32 = 0.75;
 
-pub struct HashMapInner<K, V>
+#[derive(Debug, Default)]
+struct HashMapInner<K, V>
 where
     K: PartialEq + Eq + Hash,
 {
     pub entries: RawArray<Entry<K, V>>,
 }
 
-#[allow(dead_code)]
 impl<K, V> HashMapInner<K, V>
 where
     K: Eq + Hash,

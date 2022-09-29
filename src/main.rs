@@ -85,7 +85,10 @@ fn repl(vm_opts: Option<vm::VmOptions>) -> std::io::Result<()> {
             exit(0);
         }
 
-        vm.interpret(line).err().map(|err| print!("{}\n", err));
+        if let Err(err) = vm.interpret(line) {
+            println!("{}", err)
+        }
+
         print!("> ");
         std::io::stdout().flush()?;
     }
