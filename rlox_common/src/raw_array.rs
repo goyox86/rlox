@@ -96,14 +96,14 @@ impl<T> RawArray<T> {
     }
 
     pub fn grow(&mut self, new_capacity: Option<usize>) {
+        let new_capacity = new_capacity.unwrap_or_else(|| self.grow_capacity());
+
         if self.capacity == 0 {
-            *self = RawArray::with_capacity(self.grow_capacity());
+            *self = RawArray::with_capacity(new_capacity);
             return;
         }
 
-        let mut new_self: RawArray<T> =
-            RawArray::with_capacity(new_capacity.unwrap_or_else(|| self.grow_capacity()));
-
+        let mut new_self: RawArray<T> = RawArray::with_capacity(new_capacity);
         unsafe {
             ptr::copy(
                 self.as_ptr() as *const T,
