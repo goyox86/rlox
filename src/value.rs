@@ -19,10 +19,6 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn from_string(string: String) -> Self {
-        Self::Obj(Object::allocate(Object::from_string(&string)))
-    }
-
     pub fn nil() -> Self {
         Self::Nil
     }
@@ -211,6 +207,6 @@ impl From<bool> for Value {
 
 impl From<&str> for Value {
     fn from(inner: &str) -> Self {
-        Self::from_string(String::new(inner))
+        Self::Obj(Object::allocate_string(String::new(inner)))
     }
 }

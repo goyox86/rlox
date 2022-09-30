@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// A copyable pointer to values in the Lox heap.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialOrd, Ord)]
 pub struct ManagedPtr<T> {
     pub raw: NonNull<T>,
 }
@@ -31,6 +31,12 @@ impl<T> ManagedPtr<T> {
 
     pub fn as_ptr(&mut self) -> *mut T {
         self.raw.as_ptr()
+    }
+}
+
+impl<T: PartialEq> PartialEq for ManagedPtr<T> {
+    fn eq(&self, other: &Self) -> bool {
+        PartialEq::eq(&**self, &**other)
     }
 }
 
@@ -116,5 +122,11 @@ impl Display for Object {
 impl From<Object> for Value {
     fn from(obj: Object) -> Self {
         Self::Obj(Object::allocate(obj))
+    }
+}
+
+impl From<String> for Value {
+    fn from(string_obj: String) -> Self {
+        Self::Obj(Object::allocate_string(string_obj))
     }
 }

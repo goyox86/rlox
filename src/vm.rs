@@ -416,14 +416,15 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn op_add_two_strings() {
-    //     let mut vm = Vm::new(None);
-    //     assert_eq!(
-    //         Value::from("hello world!"),
-    //         vm.interpret("\"hello\" + \"world!\";".to_string()).unwrap()
-    //     );
-    // }
+    #[test]
+    fn op_add_two_strings() {
+        let mut vm = Vm::new(None);
+        assert_eq!(
+            Value::from("hello world!"),
+            vm.interpret("\"hello\" + \" world!\";".to_string())
+                .unwrap()
+        );
+    }
 
     #[test]
     fn op_add_type_both_number_error() {
