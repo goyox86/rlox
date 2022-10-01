@@ -1,0 +1,5 @@
+if (true) {
+  print "Yoooo";
+} else {
+  print "Noooooo";
+}

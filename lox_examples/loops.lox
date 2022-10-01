@@ -1,0 +1,6 @@
+{
+  var a = true;
+  while (a and true) {
+    print "YES!";
+  }
+}

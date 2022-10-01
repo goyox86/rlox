@@ -71,6 +71,9 @@ pub(crate) enum OpCode {
     SetGlobal,
     GetLocal,
     SetLocal,
+    JumpIfFalse,
+    Jump,
+    Loop,
 }
 
 impl Display for OpCode {
@@ -97,6 +100,9 @@ impl Display for OpCode {
             OpCode::SetGlobal => "OP_SET_GLOBAL",
             OpCode::GetLocal => "OP_GET_LOCAL",
             OpCode::SetLocal => "OP_SET_LOCAL",
+            OpCode::JumpIfFalse => "OP_JUMP_IF_FALSE",
+            OpCode::Jump => "OP_JUMP",
+            OpCode::Loop => "OP_LOOP",
         };
 
         write!(f, "{}", me_str)
@@ -181,6 +187,9 @@ impl<'d> Disassembler<'d> {
             OpCode::SetGlobal => self.constant_instruction("OP_SET_GLOBAL"),
             OpCode::GetLocal => self.byte_instruction("OP_GET_LOCAL"),
             OpCode::SetLocal => self.byte_instruction("OP_SET_LOCAL"),
+            OpCode::JumpIfFalse => self.jump_instruction("OP_JUMP_IF_FALSE", 1),
+            OpCode::Jump => self.jump_instruction("OP_JUMP", 1),
+            OpCode::Loop => self.jump_instruction("OP_LOOP", -1),
             _ => unreachable!(),
         };
 
@@ -193,12 +202,12 @@ impl<'d> Disassembler<'d> {
     }
 
     fn constant_instruction(&mut self, name: &str) {
-        let constant = self.chunk.code[self.offset + 1];
+        let constant = self.chunk.code[self.offset + 1] as usize;
 
         writeln!(
             self.output,
             "{:<16} {:<4} '{}'",
-            name, constant, &self.chunk.constants[constant as usize]
+            name, constant, &self.chunk.constants[constant]
         );
         self.offset += 2;
     }
@@ -208,6 +217,20 @@ impl<'d> Disassembler<'d> {
 
         writeln!(self.output, "{:<16} {:<4}", name, slot);
         self.offset += 2;
+    }
+
+    fn jump_instruction(&mut self, name: &str, sign: i32) {
+        let mut jump: u16 = (self.chunk.code[self.offset + 1] as u16) << 8;
+        jump |= self.chunk.code[self.offset + 2] as u16;
+
+        writeln!(
+            self.output,
+            "{:<16} {:<4} -> {}",
+            name,
+            self.offset,
+            self.offset as i32 + 3 + (sign * jump as i32)
+        );
+        self.offset += 3;
     }
 
     fn move_current_instruction(&mut self, offset: usize) {

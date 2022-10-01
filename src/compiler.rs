@@ -213,7 +213,7 @@ impl<'source> CompilerCtx<'source> {
             TokenKind::Number,
             ParseRule(Some(number), None, Precedence::None),
         );
-        rules.insert(TokenKind::And, ParseRule(None, None, Precedence::None));
+        rules.insert(TokenKind::And, ParseRule(None, Some(and_), Precedence::And));
         rules.insert(TokenKind::Class, ParseRule(None, None, Precedence::None));
         rules.insert(TokenKind::Else, ParseRule(None, None, Precedence::None));
         rules.insert(
@@ -227,7 +227,7 @@ impl<'source> CompilerCtx<'source> {
             TokenKind::Nil,
             ParseRule(Some(literal), None, Precedence::None),
         );
-        rules.insert(TokenKind::Or, ParseRule(None, None, Precedence::None));
+        rules.insert(TokenKind::Or, ParseRule(None, Some(or_), Precedence::Or));
         rules.insert(TokenKind::Print, ParseRule(None, None, Precedence::None));
         rules.insert(TokenKind::Return, ParseRule(None, None, Precedence::None));
         rules.insert(TokenKind::Super, ParseRule(None, None, Precedence::None));
@@ -281,6 +281,10 @@ fn declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
 fn statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     if matches(ctx, TokenKind::Print) {
         print_statement(ctx)?;
+    } else if matches(ctx, TokenKind::If) {
+        if_statement(ctx)?;
+    } else if matches(ctx, TokenKind::While) {
+        while_statement(ctx)?;
     } else if matches(ctx, TokenKind::LeftBrace) {
         begin_scope(ctx);
         block(ctx)?;
@@ -290,6 +294,54 @@ fn statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     }
 
     Ok(())
+}
+
+fn if_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    consume(ctx, TokenKind::LeftParen, "expect '(' after 'if'.")?;
+    expression(ctx)?;
+    consume(ctx, TokenKind::RightParen, "expect ')' after condition.")?;
+
+    let then_jump = emit_jump(ctx, OpCode::JumpIfFalse);
+    emit_byte(ctx, OpCode::Pop as u8);
+    statement(ctx)?;
+
+    let else_jump = emit_jump(ctx, OpCode::Jump);
+    patch_jump(ctx, then_jump);
+    emit_byte(ctx, OpCode::Pop as u8);
+
+    if matches(ctx, TokenKind::Else) {
+        statement(ctx)?;
+    }
+    patch_jump(ctx, else_jump);
+
+    Ok(())
+}
+
+fn while_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
+    let loop_start = ctx.chunk.code.len();
+
+    consume(ctx, TokenKind::LeftParen, "expect '(' after 'while'.")?;
+    expression(ctx)?;
+    consume(ctx, TokenKind::RightParen, "expect ')' after condition.")?;
+
+    let exit_jump = emit_jump(ctx, OpCode::JumpIfFalse);
+    emit_byte(ctx, OpCode::Pop as u8);
+    statement(ctx)?;
+    emit_loop(ctx, loop_start);
+
+    patch_jump(ctx, exit_jump);
+    emit_byte(ctx, OpCode::Pop as u8);
+
+    Ok(())
+}
+
+fn emit_loop(ctx: &mut CompilerCtx, loop_start: usize) {
+    emit_byte(ctx, OpCode::Loop as u8);
+
+    let offset = ctx.chunk.code.len() - loop_start + 2;
+
+    emit_byte(ctx, ((offset >> 8) & 0xff) as u8);
+    emit_byte(ctx, (offset & 0xff) as u8);
 }
 
 fn end_scope(ctx: &mut CompilerCtx) {
@@ -523,6 +575,29 @@ fn define_variable(ctx: &mut CompilerCtx, global_index: u8) {
     emit_bytes(ctx, OpCode::DefineGlobal as u8, global_index as u8);
 }
 
+fn and_(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
+    let end_jump = emit_jump(ctx, OpCode::JumpIfFalse);
+    emit_byte(ctx, OpCode::Pop as u8);
+
+    parse_precedence(ctx, Precedence::And);
+    patch_jump(ctx, end_jump);
+
+    Ok(())
+}
+
+fn or_(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
+    let else_jump = emit_jump(ctx, OpCode::JumpIfFalse);
+    let end_jump = emit_jump(ctx, OpCode::Jump);
+
+    patch_jump(ctx, else_jump);
+    emit_byte(ctx, OpCode::Pop as u8);
+
+    parse_precedence(ctx, Precedence::Or);
+    patch_jump(ctx, end_jump);
+
+    Ok(())
+}
+
 fn identifier_constant(ctx: &mut CompilerCtx, token: Token) -> u8 {
     let chars = &ctx.previous.lexeme().unwrap();
     let string_obj = String::new(chars);
@@ -676,6 +751,25 @@ fn emit_byte(ctx: &mut CompilerCtx, byte: u8) {
 fn emit_bytes(ctx: &mut CompilerCtx, byte1: u8, byte2: u8) {
     emit_byte(ctx, byte1);
     emit_byte(ctx, byte2);
+}
+
+#[inline(always)]
+fn emit_jump(ctx: &mut CompilerCtx, jump_op: OpCode) -> usize {
+    emit_byte(ctx, jump_op as u8);
+    emit_byte(ctx, 0xff);
+    emit_byte(ctx, 0xff);
+
+    ctx.chunk.len() - 2
+}
+
+#[inline(always)]
+fn patch_jump(ctx: &mut CompilerCtx, offset: usize) {
+    let jump = ctx.chunk.len() - offset - 2;
+
+    unsafe {
+        ctx.chunk.code[offset] = ((jump >> 8) & 0xff) as u8;
+        ctx.chunk.code[offset + 1] = (jump & 0xff) as u8;
+    };
 }
 
 #[inline(always)]

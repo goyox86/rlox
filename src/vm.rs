@@ -149,6 +149,18 @@ impl Vm {
     }
 
     #[inline]
+    fn read_short(&mut self) -> u16 {
+        unsafe {
+            let byte1 = *self.ip;
+            self.ip = self.ip.add(1);
+            let byte2 = *self.ip;
+            self.ip = self.ip.add(1);
+
+            u16::from_le_bytes([byte1, byte2])
+        }
+    }
+
+    #[inline]
     fn read_constant(&mut self) -> Value {
         let const_index_byte = self.read_byte();
         unsafe {
@@ -330,8 +342,8 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 vm.push(left / right);
             }
             OpCode::AddNil => vm.push(Value::Nil),
-            OpCode::AddTrue => vm.push(Value::r#false()),
-            OpCode::AddFalse => vm.push(Value::r#true()),
+            OpCode::AddTrue => vm.push(Value::r#true()),
+            OpCode::AddFalse => vm.push(Value::r#false()),
             OpCode::Not => {
                 let value = vm.pop();
                 vm.push(Value::from(value.is_falsey()))
@@ -385,6 +397,20 @@ fn run(vm: &mut Vm) -> InterpretResult {
             OpCode::SetLocal => {
                 let slot = vm.read_byte();
                 vm.stack[slot as usize] = vm.peek(0)?;
+            }
+            OpCode::JumpIfFalse => {
+                let offset = vm.read_short();
+                if vm.peek(0)?.is_falsey() {
+                    unsafe { vm.ip.add(offset.into()) };
+                }
+            }
+            OpCode::Jump => {
+                let offset = vm.read_short();
+                unsafe { vm.ip.add(offset.into()) };
+            }
+            OpCode::Loop => {
+                let offset = vm.read_short();
+                unsafe { vm.ip.sub(offset.into()) };
             }
         }
     }

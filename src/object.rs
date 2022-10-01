@@ -18,7 +18,10 @@ pub struct ManagedPtr<T> {
     pub raw: NonNull<T>,
 }
 
-impl<T> ManagedPtr<T> {
+impl<T> ManagedPtr<T>
+where
+    T: std::fmt::Debug,
+{
     pub(crate) fn new(object: T) -> Self {
         let boxed = Box::into_raw(Box::new(object));
         // Safety: object is always valid value, into_raw promises a well-aligned non-null pointer.
