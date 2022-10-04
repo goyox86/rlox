@@ -1,5 +1,24 @@
-if (true) {
-  print "Yoooo";
+print "Just to put some instructions in the chunk";
+print "Just to put some instructions in the chunk";
+print "Just to put some instructions in the chunk";
+print "Just to put some instructions in the chunk";
+print "Just to put some instructions in the chunk";
+print "Just to put some instructions in the chunk";
+print "Just to put some instructions in the chunk";
+
+var a = 1;
+if (a == 1 and true) {
+  print "Then working properly!";
 } else {
-  print "Noooooo";
+  print "Then not working properly";
 }
+print "After the first conditional";
+
+var b = 2;
+if (b == 1) {
+  print "Else not working properly";
+} else {
+  print "Else working properly!";
+}
+print "After the second conditional";
+print "Bye";

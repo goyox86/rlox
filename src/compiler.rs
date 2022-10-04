@@ -318,7 +318,7 @@ fn if_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
 }
 
 fn while_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
-    let loop_start = ctx.chunk.code.len();
+    let loop_start = ctx.chunk.code.len() as u16;
 
     consume(ctx, TokenKind::LeftParen, "expect '(' after 'while'.")?;
     expression(ctx)?;
@@ -335,13 +335,14 @@ fn while_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(())
 }
 
-fn emit_loop(ctx: &mut CompilerCtx, loop_start: usize) {
+fn emit_loop(ctx: &mut CompilerCtx, loop_start: u16) {
     emit_byte(ctx, OpCode::Loop as u8);
 
-    let offset = ctx.chunk.code.len() - loop_start + 2;
+    let offset = (ctx.chunk.code.len() as u16) - loop_start + 2;
+    let offset_bytes = offset.to_ne_bytes();
 
-    emit_byte(ctx, ((offset >> 8) & 0xff) as u8);
-    emit_byte(ctx, (offset & 0xff) as u8);
+    emit_byte(ctx, offset_bytes[0]);
+    emit_byte(ctx, offset_bytes[1]);
 }
 
 fn end_scope(ctx: &mut CompilerCtx) {
@@ -754,22 +755,22 @@ fn emit_bytes(ctx: &mut CompilerCtx, byte1: u8, byte2: u8) {
 }
 
 #[inline(always)]
-fn emit_jump(ctx: &mut CompilerCtx, jump_op: OpCode) -> usize {
+fn emit_jump(ctx: &mut CompilerCtx, jump_op: OpCode) -> u16 {
     emit_byte(ctx, jump_op as u8);
     emit_byte(ctx, 0xff);
     emit_byte(ctx, 0xff);
 
-    ctx.chunk.len() - 2
+    (ctx.chunk.len() - 2) as u16
 }
 
 #[inline(always)]
-fn patch_jump(ctx: &mut CompilerCtx, offset: usize) {
-    let jump = ctx.chunk.len() - offset - 2;
+fn patch_jump(ctx: &mut CompilerCtx, offset: u16) {
+    let jump = ctx.chunk.len() as u16 - offset - 2;
+    let jump_bytes = jump.to_ne_bytes();
 
-    unsafe {
-        ctx.chunk.code[offset] = ((jump >> 8) & 0xff) as u8;
-        ctx.chunk.code[offset + 1] = (jump & 0xff) as u8;
-    };
+    let offset = offset as usize;
+    ctx.chunk.code[offset] = jump_bytes[0];
+    ctx.chunk.code[offset + 1] = jump_bytes[1];
 }
 
 #[inline(always)]

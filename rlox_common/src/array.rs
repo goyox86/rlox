@@ -5,7 +5,7 @@ use std::{
 
 use crate::raw_array::RawArray;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Array<T> {
     count: usize,
     buf: RawArray<T>,
@@ -190,6 +190,19 @@ impl<'a, T> Iterator for IterMut<'a, T> {
         let next = self.array.get_mut(self.len);
         self.len += 1;
         next
+    }
+}
+
+impl<T> std::fmt::Debug for Array<T>
+where
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "")?;
+        for (idx, elem) in self.iter().enumerate() {
+            writeln!(f, "{:?}, {:?}", idx, elem)?
+        }
+        Ok(())
     }
 }
 

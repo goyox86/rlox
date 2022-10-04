@@ -1,6 +1,8 @@
-{
-  var a = true;
-  while (a and true) {
+  var a = 1;
+  var b = 2;
+  print "wat";
+  while (a < 3) {
     print "YES!";
+    a = a + 1;
   }
-}
+  print "after the while";

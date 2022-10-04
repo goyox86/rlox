@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    fmt::{self, Display},
+    fmt::{self, Debug, Display},
     ops::{Add, Deref, DerefMut},
     ptr::NonNull,
     string::String as RustString,
@@ -13,15 +13,12 @@ use crate::{
 };
 
 /// A copyable pointer to values in the Lox heap.
-#[derive(Clone, Debug, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialOrd, Ord)]
 pub struct ManagedPtr<T> {
     pub raw: NonNull<T>,
 }
 
-impl<T> ManagedPtr<T>
-where
-    T: std::fmt::Debug,
-{
+impl<T> ManagedPtr<T> {
     pub(crate) fn new(object: T) -> Self {
         let boxed = Box::into_raw(Box::new(object));
         // Safety: object is always valid value, into_raw promises a well-aligned non-null pointer.
@@ -58,9 +55,17 @@ impl<T> DerefMut for ManagedPtr<T> {
 }
 
 impl<T: Clone> Copy for ManagedPtr<T> {}
-// TODO: Hey, not sure about this
 unsafe impl<T> Sync for ManagedPtr<T> where T: Sync {}
 unsafe impl<T> Send for ManagedPtr<T> where T: Send {}
+
+impl<T: Debug> Debug for ManagedPtr<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ManagedPtr")
+            .field("raw", &self.raw)
+            .field("value", unsafe { self.raw.as_ref() })
+            .finish()
+    }
+}
 
 /// A Lox object allocated in the Lox heap.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]

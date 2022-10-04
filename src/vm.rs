@@ -151,12 +151,10 @@ impl Vm {
     #[inline]
     fn read_short(&mut self) -> u16 {
         unsafe {
-            let byte1 = *self.ip;
-            self.ip = self.ip.add(1);
-            let byte2 = *self.ip;
-            self.ip = self.ip.add(1);
+            let bytes = [*self.ip, *self.ip.add(1)];
+            self.ip = self.ip.add(2);
 
-            u16::from_le_bytes([byte1, byte2])
+            u16::from_ne_bytes(bytes)
         }
     }
 
@@ -401,16 +399,16 @@ fn run(vm: &mut Vm) -> InterpretResult {
             OpCode::JumpIfFalse => {
                 let offset = vm.read_short();
                 if vm.peek(0)?.is_falsey() {
-                    unsafe { vm.ip.add(offset.into()) };
+                    unsafe { vm.ip = vm.ip.add(offset.into()) };
                 }
             }
             OpCode::Jump => {
                 let offset = vm.read_short();
-                unsafe { vm.ip.add(offset.into()) };
+                unsafe { vm.ip = vm.ip.add(offset.into()) };
             }
             OpCode::Loop => {
                 let offset = vm.read_short();
-                unsafe { vm.ip.sub(offset.into()) };
+                unsafe { vm.ip = vm.ip.sub(offset.into()) };
             }
         }
     }

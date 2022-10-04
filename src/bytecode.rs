@@ -8,7 +8,7 @@ use rlox_common::Array;
 /// A chunk of bytecode.
 ///
 /// A heap allocated, dynamic array of contiguous bytes.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct Chunk {
     pub code: Array<u8>,
     pub constants: Array<Value>,
@@ -44,6 +44,76 @@ impl Chunk {
 
     pub fn len(&self) -> usize {
         self.code.len()
+    }
+}
+
+impl std::fmt::Debug for Chunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut insns_iter = self.code.iter();
+        let mut current;
+        let mut offset = 0;
+
+        loop {
+            current = insns_iter.next();
+            if current.is_none() {
+                break;
+            }
+            let opcode = OpCode::from_repr(*current.unwrap()).unwrap();
+            match opcode {
+                OpCode::Return
+                | OpCode::AddNil
+                | OpCode::Print
+                | OpCode::AddTrue
+                | OpCode::AddFalse
+                | OpCode::Equal
+                | OpCode::Greater
+                | OpCode::Less
+                | OpCode::Negate
+                | OpCode::Add
+                | OpCode::Substract
+                | OpCode::Multiply
+                | OpCode::Divide
+                | OpCode::Not
+                | OpCode::Pop => {
+                    writeln!(f, "{:?} {:?}", offset, opcode);
+                    offset += 1;
+                }
+                OpCode::JumpIfFalse | OpCode::Jump => {
+                    let byte1 = insns_iter.next().unwrap();
+                    current = insns_iter.next();
+                    let byte2 = current.unwrap();
+                    writeln!(
+                        f,
+                        "{:?} {:?}: {:?}",
+                        offset,
+                        opcode,
+                        u16::from_ne_bytes([*byte1, *byte2])
+                    );
+                    offset += 3;
+                }
+
+                OpCode::Loop => {
+                    let byte1 = insns_iter.next().unwrap();
+                    current = insns_iter.next();
+                    let byte2 = current.unwrap();
+                    let jump = u16::from_ne_bytes([*byte1, *byte2]);
+                    writeln!(f, "{:?} {:?}: {:?}", offset, opcode, jump);
+                    offset -= jump as isize;
+                }
+                OpCode::AddConstant
+                | OpCode::GetGlobal
+                | OpCode::SetGlobal
+                | OpCode::GetLocal
+                | OpCode::SetLocal
+                | OpCode::DefineGlobal => {
+                    current = insns_iter.next();
+                    writeln!(f, "{:?} {:?}: {:?}", offset, opcode, current.unwrap());
+                    offset += 2;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -202,12 +272,12 @@ impl<'d> Disassembler<'d> {
     }
 
     fn constant_instruction(&mut self, name: &str) {
-        let constant = self.chunk.code[self.offset + 1] as usize;
+        let constant_idx = self.chunk.code[self.offset + 1];
 
         writeln!(
             self.output,
             "{:<16} {:<4} '{}'",
-            name, constant, &self.chunk.constants[constant]
+            name, constant_idx, &self.chunk.constants[constant_idx as usize]
         );
         self.offset += 2;
     }
@@ -219,17 +289,20 @@ impl<'d> Disassembler<'d> {
         self.offset += 2;
     }
 
-    fn jump_instruction(&mut self, name: &str, sign: i32) {
-        let mut jump: u16 = (self.chunk.code[self.offset + 1] as u16) << 8;
-        jump |= self.chunk.code[self.offset + 2] as u16;
-
+    fn jump_instruction(&mut self, name: &str, sign: i16) {
+        let jump_bytes = [
+            self.chunk.code[self.offset + 1],
+            self.chunk.code[self.offset + 2],
+        ];
+        let jump = u16::from_ne_bytes(jump_bytes);
         writeln!(
             self.output,
             "{:<16} {:<4} -> {}",
             name,
             self.offset,
-            self.offset as i32 + 3 + (sign * jump as i32)
+            (self.offset as i16) + 3 + (sign * jump as i16)
         );
+
         self.offset += 3;
     }
 
