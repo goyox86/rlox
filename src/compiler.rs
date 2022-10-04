@@ -930,4 +930,38 @@ mod tests {
         });
         assert_eq!(expected_error, compiler.compile("{ var a = a; }"));
     }
+
+    #[test]
+    fn invalid_if_stmt_errors() {
+        let compiler = Compiler::new(None);
+
+        let expected_error = Err(CompilerError {
+            msg: "expect ')' after condition.".into(),
+            line: 1,
+        });
+        assert_eq!(expected_error, compiler.compile("if (a == 1 {}"));
+
+        let expected_error = Err(CompilerError {
+            msg: "expect '(' after 'if'.".into(),
+            line: 1,
+        });
+        assert_eq!(expected_error, compiler.compile("if a == 1) {}"));
+    }
+
+    #[test]
+    fn invalid_while_stmt_errors() {
+        let compiler = Compiler::new(None);
+
+        let expected_error = Err(CompilerError {
+            msg: "expect ')' after condition.".into(),
+            line: 1,
+        });
+        assert_eq!(expected_error, compiler.compile("while (a == 1 {}"));
+
+        let expected_error = Err(CompilerError {
+            msg: "expect '(' after 'while'.".into(),
+            line: 1,
+        });
+        assert_eq!(expected_error, compiler.compile("while a == 1) {}"));
+    }
 }
