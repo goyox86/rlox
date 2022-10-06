@@ -465,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn op_add_type_both_number_error_2() {
+    fn op_add_type_both_strings_error() {
         let mut vm = Vm::new(None);
 
         let expected_error = Err(VmError::Runtime(RuntimeError {
@@ -473,7 +473,7 @@ mod tests {
             line: 1,
         }));
 
-        assert_eq!(expected_error, vm.interpret("1 + nil;".to_string()));
+        assert_eq!(expected_error, vm.interpret("\"1\" + nil;".to_string()));
     }
 
     #[test]
