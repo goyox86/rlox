@@ -1,4 +1,7 @@
-use std::fmt::{Display, Write};
+use std::{
+    fmt::{Debug, Display, Write},
+    ops::{Deref, DerefMut},
+};
 
 use strum::FromRepr;
 
@@ -11,15 +14,50 @@ use rlox_common::Array;
 #[derive(Clone, PartialEq)]
 pub(crate) struct Chunk {
     pub code: Array<u8>,
-    pub constants: Array<Value>,
+    pub constants: Constants,
     pub lines: Array<usize>,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct Constants(Array<Value>);
+
+impl Constants {
+    pub fn new() -> Self {
+        Self(Array::new())
+    }
+}
+
+impl Deref for Constants {
+    type Target = Array<Value>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Constants {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Debug for Constants {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "== constants ==")?;
+        writeln!(f, "[")?;
+        for (idx, value) in self.0.iter().enumerate() {
+            writeln!(f, "   {} | {:?}", idx, value)?;
+        }
+        writeln!(f, "]")?;
+        Ok(())
+    }
 }
 
 impl Chunk {
     pub fn new() -> Self {
         Self {
             code: Array::new(),
-            constants: Array::new(),
+            constants: Constants::new(),
             lines: Array::new(),
         }
     }
@@ -47,73 +85,10 @@ impl Chunk {
     }
 }
 
-impl std::fmt::Debug for Chunk {
+impl Debug for Chunk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut insns_iter = self.code.iter();
-        let mut current;
-        let mut offset = 0;
-
-        loop {
-            current = insns_iter.next();
-            if current.is_none() {
-                break;
-            }
-            let opcode = OpCode::from_repr(*current.unwrap()).unwrap();
-            match opcode {
-                OpCode::Return
-                | OpCode::AddNil
-                | OpCode::Print
-                | OpCode::AddTrue
-                | OpCode::AddFalse
-                | OpCode::Equal
-                | OpCode::Greater
-                | OpCode::Less
-                | OpCode::Negate
-                | OpCode::Add
-                | OpCode::Substract
-                | OpCode::Multiply
-                | OpCode::Divide
-                | OpCode::Not
-                | OpCode::Pop => {
-                    writeln!(f, "{:?} {:?}", offset, opcode);
-                    offset += 1;
-                }
-                OpCode::JumpIfFalse | OpCode::Jump => {
-                    let byte1 = insns_iter.next().unwrap();
-                    current = insns_iter.next();
-                    let byte2 = current.unwrap();
-                    writeln!(
-                        f,
-                        "{:?} {:?}: {:?}",
-                        offset,
-                        opcode,
-                        u16::from_ne_bytes([*byte1, *byte2])
-                    );
-                    offset += 3;
-                }
-
-                OpCode::Loop => {
-                    let byte1 = insns_iter.next().unwrap();
-                    current = insns_iter.next();
-                    let byte2 = current.unwrap();
-                    let jump = u16::from_ne_bytes([*byte1, *byte2]);
-                    writeln!(f, "{:?} {:?}: {:?}", offset, opcode, jump);
-                    offset -= jump as isize;
-                }
-                OpCode::AddConstant
-                | OpCode::GetGlobal
-                | OpCode::SetGlobal
-                | OpCode::GetLocal
-                | OpCode::SetLocal
-                | OpCode::DefineGlobal => {
-                    current = insns_iter.next();
-                    writeln!(f, "{:?} {:?}: {:?}", offset, opcode, current.unwrap());
-                    offset += 2;
-                }
-            }
-        }
-
-        Ok(())
+        write!(f, "{:?}", self.constants)?;
+        write!(f, "{}", Disassembler::disassemble_chunk(self, "chunk"))
     }
 }
 
