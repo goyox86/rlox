@@ -446,6 +446,7 @@ where
         matches!(self, Self::Occupied { .. })
     }
 
+    #[inline]
     pub fn is_tombstone(&self) -> bool {
         matches!(self, Self::Tombstone)
     }
