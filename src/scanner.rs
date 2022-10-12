@@ -110,8 +110,9 @@ impl<'source> Token<'source> {
         &self.kind
     }
 
-    pub fn lexeme(&self) -> Option<&str> {
+    pub fn lexeme(&self) -> &str {
         self.lexeme
+            .expect("internal error: lexeme not available for this token.")
     }
 }
 
@@ -300,10 +301,7 @@ impl<'source> Scanner<'source> {
         }
 
         if self.advance().is_none() {
-            return Err(ScannerError {
-                msg: "unterminated string literal".into(),
-                line: self.line,
-            });
+            return Err(ScannerError::new("unterminated string literal", self.line));
         }
 
         Ok(self.make_token(TokenKind::String))
@@ -439,6 +437,13 @@ pub struct ScannerError {
 }
 
 impl ScannerError {
+    pub fn new(msg: &str, line: usize) -> Self {
+        Self {
+            msg: msg.to_string(),
+            line,
+        }
+    }
+
     pub fn msg(&self) -> &str {
         &self.msg
     }
@@ -611,11 +616,11 @@ mod tests {
         let mut scanner = Scanner::new("//this should all be ignored\n//so should this\n\n\n");
 
         let token = scanner.scan_token().unwrap();
-        assert_eq!("//this should all be ignored", token.lexeme().unwrap());
+        assert_eq!("//this should all be ignored", token.lexeme());
         assert_eq!(false, scanner.is_at_end());
         assert_eq!(1, scanner.line());
         let token = scanner.scan_token().unwrap();
-        assert_eq!("//so should this", token.lexeme().unwrap());
+        assert_eq!("//so should this", token.lexeme());
         assert_eq!(false, scanner.is_at_end());
         assert_eq!(2, scanner.line());
         // still have whitespeces to consume
@@ -790,7 +795,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::String, *token.kind());
-        assert_eq!("\"this is a test string\"", token.lexeme().unwrap());
+        assert_eq!("\"this is a test string\"", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -802,7 +807,7 @@ mod tests {
         assert_eq!(TokenKind::String, *token.kind());
         assert_eq!(
             "\"this is a test string\n and this is the second line\"",
-            token.lexeme().unwrap()
+            token.lexeme()
         );
         assert_eq!(2, scanner.line());
     }
@@ -813,10 +818,7 @@ mod tests {
         let mut scanner = Scanner::new("\"this is a test string");
 
         let token = scanner.scan_token().unwrap();
-        assert_eq!(
-            "\"this is an unterminated test string",
-            token.lexeme().unwrap()
-        );
+        assert_eq!("\"this is an unterminated test string", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -826,7 +828,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Number, *token.kind());
-        assert_eq!("42", token.lexeme().unwrap());
+        assert_eq!("42", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -836,7 +838,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Number, *token.kind());
-        assert_eq!("7.65", token.lexeme().unwrap());
+        assert_eq!("7.65", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -846,7 +848,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Identifier, *token.kind());
-        assert_eq!("valid_name", token.lexeme().unwrap());
+        assert_eq!("valid_name", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -856,7 +858,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Identifier, *token.kind());
-        assert_eq!("_also_valid_id", token.lexeme().unwrap());
+        assert_eq!("_also_valid_id", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -866,7 +868,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::And, *token.kind());
-        assert_eq!("and", token.lexeme().unwrap());
+        assert_eq!("and", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -876,7 +878,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Class, *token.kind());
-        assert_eq!("class", token.lexeme().unwrap());
+        assert_eq!("class", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -886,7 +888,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Else, *token.kind());
-        assert_eq!("else", token.lexeme().unwrap());
+        assert_eq!("else", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -896,7 +898,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::False, *token.kind());
-        assert_eq!("false", token.lexeme().unwrap());
+        assert_eq!("false", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -906,7 +908,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::For, *token.kind());
-        assert_eq!("for", token.lexeme().unwrap());
+        assert_eq!("for", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -916,7 +918,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Fun, *token.kind());
-        assert_eq!("fun", token.lexeme().unwrap());
+        assert_eq!("fun", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -926,7 +928,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::If, *token.kind());
-        assert_eq!("if", token.lexeme().unwrap());
+        assert_eq!("if", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -936,7 +938,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Nil, *token.kind());
-        assert_eq!("nil", token.lexeme().unwrap());
+        assert_eq!("nil", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -946,7 +948,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Or, *token.kind());
-        assert_eq!("or", token.lexeme().unwrap());
+        assert_eq!("or", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -956,7 +958,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Print, *token.kind());
-        assert_eq!("print", token.lexeme().unwrap());
+        assert_eq!("print", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -966,7 +968,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Return, *token.kind());
-        assert_eq!("return", token.lexeme().unwrap());
+        assert_eq!("return", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -976,7 +978,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Super, *token.kind());
-        assert_eq!("super", token.lexeme().unwrap());
+        assert_eq!("super", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -986,7 +988,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::This, *token.kind());
-        assert_eq!("this", token.lexeme().unwrap());
+        assert_eq!("this", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -996,7 +998,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::True, *token.kind());
-        assert_eq!("true", token.lexeme().unwrap());
+        assert_eq!("true", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -1006,7 +1008,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Var, *token.kind());
-        assert_eq!("var", token.lexeme().unwrap());
+        assert_eq!("var", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -1016,7 +1018,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::While, *token.kind());
-        assert_eq!("while", token.lexeme().unwrap());
+        assert_eq!("while", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 
@@ -1026,7 +1028,7 @@ mod tests {
 
         let token = scanner.scan_token().unwrap();
         assert_eq!(TokenKind::Identifier, *token.kind());
-        assert_eq!("variable", token.lexeme().unwrap());
+        assert_eq!("variable", token.lexeme());
         assert_eq!(1, scanner.line());
     }
 

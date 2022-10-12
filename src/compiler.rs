@@ -403,7 +403,7 @@ fn unary(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
 
 fn number(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     let previous_token = ctx.previous;
-    let number: f64 = f64::from_str(previous_token.lexeme().unwrap()).unwrap();
+    let number: f64 = f64::from_str(previous_token.lexeme()).unwrap();
     let value = Value::Number(number);
 
     emit_constant(ctx, value);
@@ -411,7 +411,7 @@ fn number(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> 
 }
 
 fn string(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
-    let lexeme = ctx.previous.lexeme().unwrap();
+    let lexeme = ctx.previous.lexeme();
     let chars = &lexeme[1..lexeme.len() - 1];
     let string_obj = String::new(chars);
     let string_value = Value::Obj(Object::allocate_string(string_obj));
@@ -593,7 +593,7 @@ fn or_(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
 }
 
 fn identifier_constant(ctx: &mut CompilerCtx, token: Token) -> u8 {
-    let chars = &ctx.previous.lexeme().unwrap();
+    let chars = &ctx.previous.lexeme();
     let string_obj = String::new(chars);
     let string_value = Value::Obj(Object::allocate_string(string_obj));
     make_constant(ctx, string_value)
