@@ -305,8 +305,6 @@ fn run(vm: &mut Vm) -> InterpretResult {
             vm.dissasemble_current_instruction();
         }
 
-        //dbg!(&vm.chunk.as_ref().unwrap().constants);
-
         let byte: u8 = vm.read_byte();
         let opcode: OpCode =
             OpCode::from_repr(byte).expect("internal error: cannot decode instruction.");
@@ -365,7 +363,9 @@ fn run(vm: &mut Vm) -> InterpretResult {
                 let left = vm.pop();
                 vm.push(Value::from(left < right));
             }
-            OpCode::Print => print!("{}", vm.pop()),
+            OpCode::Print => {
+                println!("{}", vm.pop());
+            }
             OpCode::Pop => {
                 vm.pop();
             }

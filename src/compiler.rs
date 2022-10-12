@@ -329,16 +329,6 @@ fn while_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     Ok(())
 }
 
-fn emit_loop(ctx: &mut CompilerCtx, loop_start: u16) {
-    emit_byte(ctx, OpCode::Loop as u8);
-
-    let offset = (ctx.chunk.code().len() as u16) - loop_start + 2;
-    let offset_bytes = offset.to_ne_bytes();
-
-    emit_byte(ctx, offset_bytes[0]);
-    emit_byte(ctx, offset_bytes[1]);
-}
-
 fn end_scope(ctx: &mut CompilerCtx) {
     ctx.scope_depth -= 1;
 
@@ -764,6 +754,17 @@ fn patch_jump(ctx: &mut CompilerCtx, offset: u16) {
     let offset = offset as usize;
     ctx.chunk.code_mut()[offset] = jump_bytes[0];
     ctx.chunk.code_mut()[offset + 1] = jump_bytes[1];
+}
+
+#[inline(always)]
+fn emit_loop(ctx: &mut CompilerCtx, loop_start: u16) {
+    emit_byte(ctx, OpCode::Loop as u8);
+
+    let offset = (ctx.chunk.code().len() as u16) - loop_start + 2;
+    let offset_bytes = offset.to_ne_bytes();
+
+    emit_byte(ctx, offset_bytes[0]);
+    emit_byte(ctx, offset_bytes[1]);
 }
 
 #[inline(always)]

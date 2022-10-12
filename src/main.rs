@@ -63,6 +63,7 @@ fn run_file(file_path: &Path, vm_opts: Option<vm::VmOptions>) -> std::io::Result
         Ok(_) => exit(0),
         Err(error) => {
             eprintln!("{}", error);
+
             let exit_code = match error {
                 vm::VmError::Compile(_) => 65,
                 vm::VmError::Runtime(_) => 70,
