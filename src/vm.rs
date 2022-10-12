@@ -165,7 +165,7 @@ impl Vm {
             self.chunk
                 .as_ref()
                 .expect("chunk expected here")
-                .constants
+                .constants()
                 .get_unchecked(const_index_byte.into())
                 .clone()
         }
@@ -218,7 +218,7 @@ impl Vm {
     fn current_line(&self) -> usize {
         let instruction = self.current_instruction_offset();
 
-        self.chunk.as_ref().unwrap().lines[instruction]
+        self.chunk.as_ref().unwrap().lines()[instruction]
     }
 
     pub fn free_objects(&mut self) {
@@ -272,7 +272,7 @@ impl Vm {
 
         Err(VmError::runtime(
             message,
-            self.chunk.as_ref().unwrap().lines[instruction],
+            self.chunk.as_ref().unwrap().lines()[instruction],
         ))
     }
 
@@ -283,7 +283,7 @@ impl Vm {
 
         Err(RuntimeError {
             msg: message.to_string(),
-            line: self.chunk.as_ref().unwrap().lines[instruction],
+            line: self.chunk.as_ref().unwrap().lines()[instruction],
         })
     }
 }

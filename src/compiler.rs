@@ -32,9 +32,10 @@ impl ParseRule {
     }
 }
 
+/// Table of fuction pointers used by the Pratt parser.
 type ParseRules = FxHashMap<TokenKind, ParseRule>;
 
-// From lowest to higest precedence
+/// From lowest to higest precedence.
 #[derive(Copy, FromRepr, Clone, Debug, Default, PartialEq, PartialOrd)]
 #[repr(u8)]
 pub(crate) enum Precedence {
@@ -60,15 +61,6 @@ impl Precedence {
                 .expect("could not find a precedence with for the provided u8"),
         }
     }
-
-    #[allow(dead_code)]
-    fn lower(self) -> Precedence {
-        match self {
-            Precedence::None => Precedence::None,
-            _ => Precedence::from_repr(self as u8 - 1)
-                .expect("could not find a precedence with for the provided u8"),
-        }
-    }
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -80,6 +72,25 @@ pub(crate) struct Compiler<'c> {
     options: Option<&'c CompilerOptions>,
 }
 
+impl<'c> Compiler<'c> {
+    pub fn new(options: Option<&'c CompilerOptions>) -> Self {
+        Self { options }
+    }
+
+    pub fn compile(&self, source: &'c str) -> Result<Chunk, CompilerError> {
+        let mut ctx = CompilerCtx::new(source, self.options);
+
+        advance(&mut ctx);
+        while (!matches(&mut ctx, TokenKind::Eof)) {
+            declaration(&mut ctx)?;
+        }
+        end(&mut ctx);
+
+        Ok(ctx.chunk)
+    }
+}
+
+/// A local variable
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Local<'l> {
     name: Token<'l>,
@@ -101,6 +112,7 @@ impl<'l> Default for Local<'l> {
     }
 }
 
+/// The compilation context. This struct holds all the state needed during compilation.
 pub(crate) struct CompilerCtx<'source> {
     chunk: Chunk,
     previous: Token<'source>,
@@ -246,24 +258,6 @@ impl<'source> CompilerCtx<'source> {
     }
 }
 
-impl<'c> Compiler<'c> {
-    pub fn new(options: Option<&'c CompilerOptions>) -> Self {
-        Self { options }
-    }
-
-    pub(crate) fn compile(&self, source: &'c str) -> Result<Chunk, CompilerError> {
-        let mut ctx = CompilerCtx::new(source, self.options);
-
-        advance(&mut ctx);
-        while (!matches(&mut ctx, TokenKind::Eof)) {
-            declaration(&mut ctx)?;
-        }
-        end(&mut ctx);
-
-        Ok(ctx.chunk)
-    }
-}
-
 fn declaration(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
     if matches(ctx, TokenKind::Var) {
         var_declaration(ctx)?
@@ -318,7 +312,7 @@ fn if_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
 }
 
 fn while_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
-    let loop_start = ctx.chunk.code.len() as u16;
+    let loop_start = ctx.chunk.code().len() as u16;
 
     consume(ctx, TokenKind::LeftParen, "expect '(' after 'while'.")?;
     expression(ctx)?;
@@ -338,7 +332,7 @@ fn while_statement(ctx: &mut CompilerCtx) -> Result<(), CompilerError> {
 fn emit_loop(ctx: &mut CompilerCtx, loop_start: u16) {
     emit_byte(ctx, OpCode::Loop as u8);
 
-    let offset = (ctx.chunk.code.len() as u16) - loop_start + 2;
+    let offset = (ctx.chunk.code().len() as u16) - loop_start + 2;
     let offset_bytes = offset.to_ne_bytes();
 
     emit_byte(ctx, offset_bytes[0]);
@@ -441,7 +435,6 @@ fn literal(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError>
 
 fn variable(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
     named_variable(ctx, ctx.previous, can_assign)?;
-
     Ok(())
 }
 
@@ -769,8 +762,8 @@ fn patch_jump(ctx: &mut CompilerCtx, offset: u16) {
     let jump_bytes = jump.to_ne_bytes();
 
     let offset = offset as usize;
-    ctx.chunk.code[offset] = jump_bytes[0];
-    ctx.chunk.code[offset + 1] = jump_bytes[1];
+    ctx.chunk.code_mut()[offset] = jump_bytes[0];
+    ctx.chunk.code_mut()[offset + 1] = jump_bytes[1];
 }
 
 #[inline(always)]

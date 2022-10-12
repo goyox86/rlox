@@ -12,10 +12,10 @@ use crate::{
     vm::{heap, strings},
 };
 
-/// A copyable pointer to values in the Lox heap.
+/// A pointer to values in the Lox heap.
 #[derive(Clone, Eq, PartialOrd, Ord)]
 pub struct ManagedPtr<T> {
-    pub raw: NonNull<T>,
+    raw: NonNull<T>,
 }
 
 impl<T> ManagedPtr<T> {
@@ -29,7 +29,7 @@ impl<T> ManagedPtr<T> {
         }
     }
 
-    pub fn as_ptr(&mut self) -> *mut T {
+    pub unsafe fn as_ptr(&mut self) -> *mut T {
         self.raw.as_ptr()
     }
 }

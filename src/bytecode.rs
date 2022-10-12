@@ -13,9 +13,9 @@ use rlox_common::Array;
 /// A heap allocated, dynamic array of contiguous bytes.
 #[derive(Clone, PartialEq)]
 pub(crate) struct Chunk {
-    pub code: Array<u8>,
-    pub constants: Constants,
-    pub lines: Array<usize>,
+    code: Array<u8>,
+    constants: Constants,
+    lines: Array<usize>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -82,6 +82,26 @@ impl Chunk {
 
     pub fn len(&self) -> usize {
         self.code.len()
+    }
+
+    pub fn code(&self) -> &Array<u8> {
+        &self.code
+    }
+
+    pub fn code_mut(&mut self) -> &mut Array<u8> {
+        &mut self.code
+    }
+
+    pub fn constants(&self) -> &Constants {
+        &self.constants
+    }
+
+    pub fn constants_mut(&mut self) -> &mut Constants {
+        &mut self.constants
+    }
+
+    pub fn lines(&self) -> &Array<usize> {
+        &self.lines
     }
 }
 
@@ -192,9 +212,9 @@ impl<'d> Disassembler<'d> {
     pub fn disassemble_instruction(&mut self, offset: usize) -> String {
         // This is so we can keep using the instance after we have called this function.
         let old_offset = self.offset;
-        self.move_current_instruction(offset);
+        self.set_offset(offset);
         let result = self.disassemble_current_instruction().to_owned();
-        self.offset = old_offset;
+        self.set_offset(old_offset);
         result
     }
 
@@ -281,7 +301,7 @@ impl<'d> Disassembler<'d> {
         self.offset += 3;
     }
 
-    fn move_current_instruction(&mut self, offset: usize) {
+    fn set_offset(&mut self, offset: usize) {
         assert!(offset < self.chunk.len(), "offset out of bounds.");
         self.offset = offset;
     }

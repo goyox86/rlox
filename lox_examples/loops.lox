@@ -9,6 +9,6 @@
 
 var i = 0;
 while (true and i < 100000) {
-  print "Looooopy\\njj";
+  print "Looooopy\\n";
   i = i + 1;
 }
