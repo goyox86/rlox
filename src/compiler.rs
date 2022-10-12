@@ -343,7 +343,7 @@ fn end_scope(ctx: &mut CompilerCtx) {
     ctx.scope_depth -= 1;
 
     while ctx.local_count > 0
-        && (ctx.locals[(ctx.local_count - 1) as usize].depth > ctx.scope_depth as isize)
+        && (ctx.locals[(ctx.local_count - 1) as usize].depth > ctx.scope_depth)
     {
         emit_byte(ctx, OpCode::Pop as u8);
         ctx.local_count -= 1;
@@ -454,7 +454,7 @@ fn named_variable(
 
     if can_assign && matches(ctx, TokenKind::Equal) {
         expression(ctx);
-        emit_bytes(ctx, set_op as u8, arg as u8);
+        emit_bytes(ctx, set_op, arg as u8);
     } else {
         emit_bytes(ctx, get_op, arg as u8);
     }
@@ -566,7 +566,7 @@ fn define_variable(ctx: &mut CompilerCtx, global_index: u8) {
         return;
     }
 
-    emit_bytes(ctx, OpCode::DefineGlobal as u8, global_index as u8);
+    emit_bytes(ctx, OpCode::DefineGlobal as u8, global_index);
 }
 
 fn and_(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {

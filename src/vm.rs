@@ -162,12 +162,12 @@ impl Vm {
     fn read_constant(&mut self) -> Value {
         let const_index_byte = self.read_byte();
         unsafe {
-            self.chunk
+            *self
+                .chunk
                 .as_ref()
                 .expect("chunk expected here")
                 .constants()
                 .get_unchecked(const_index_byte.into())
-                .clone()
         }
     }
 
@@ -193,7 +193,7 @@ impl Vm {
     #[inline]
     fn peek(&mut self, distance: usize) -> Result<Value, RuntimeError> {
         match self.stack.peek(distance) {
-            Some(value) => Ok(value.clone()),
+            Some(value) => Ok(*value),
             None => Err(RuntimeError {
                 msg: format!("no value at distance: {} in the stack.", distance),
                 line: self.current_line(),
@@ -378,7 +378,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
             OpCode::GetGlobal => {
                 let name = vm.read_string();
                 match vm.globals.get(&name) {
-                    Some(value) => vm.push(value.clone()),
+                    Some(value) => vm.push(*value),
                     None => return vm.vm_error(&format!("undefined variable '{}'.", name)),
                 };
             }
@@ -392,7 +392,7 @@ fn run(vm: &mut Vm) -> InterpretResult {
             }
             OpCode::GetLocal => {
                 let slot = vm.read_byte();
-                vm.push(vm.stack[slot as usize].clone());
+                vm.push(vm.stack[slot as usize]);
             }
             OpCode::SetLocal => {
                 let slot = vm.read_byte();

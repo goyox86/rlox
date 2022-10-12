@@ -276,7 +276,7 @@ impl<'source> Scanner<'source> {
                 }
             }
             '"' => self.string()?,
-            _ => unreachable!(),
+            _ => unreachable!("internal error: cannot recognize character for current token."),
         };
 
         Ok(result)

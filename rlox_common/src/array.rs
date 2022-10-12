@@ -198,7 +198,7 @@ where
     T: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "")?;
+        writeln!(f)?;
         for (idx, elem) in self.iter().enumerate() {
             writeln!(f, "{:?}, {:?}", idx, elem)?
         }
