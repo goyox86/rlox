@@ -6,7 +6,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use crate::object::{ManagedPtr, Object};
+use crate::object::{Handle, Object};
 use crate::string::String;
 use crate::vm;
 
@@ -15,7 +15,7 @@ pub enum Value {
     Number(f64),
     Boolean(bool),
     Nil,
-    Obj(ManagedPtr<Object>),
+    Obj(Handle<Object>),
 }
 
 impl Value {
@@ -80,7 +80,7 @@ impl Value {
         }
     }
 
-    pub fn as_obj(&self) -> Option<&ManagedPtr<Object>> {
+    pub fn as_obj(&self) -> Option<&Handle<Object>> {
         if let Self::Obj(v) = self {
             Some(v)
         } else {

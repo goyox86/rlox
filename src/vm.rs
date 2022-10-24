@@ -9,21 +9,21 @@ use once_cell::sync::OnceCell;
 
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
-use crate::object::{ManagedPtr, Object};
+use crate::object::{Handle, Object};
 use crate::string::String as LoxString;
 use crate::value::Value;
 use rlox_common::{Array, HashMap, Stack};
 
-pub fn heap() -> &'static Mutex<LinkedList<ManagedPtr<Object>>> {
-    static HEAP: OnceCell<Mutex<LinkedList<ManagedPtr<Object>>>> = OnceCell::new();
+pub fn heap() -> &'static Mutex<LinkedList<Handle<Object>>> {
+    static HEAP: OnceCell<Mutex<LinkedList<Handle<Object>>>> = OnceCell::new();
     HEAP.get_or_init(|| {
         let mut heap = LinkedList::new();
         Mutex::new(heap)
     })
 }
 
-pub fn strings() -> &'static Mutex<HashMap<LoxString, ManagedPtr<Object>>> {
-    static HEAP: OnceCell<Mutex<HashMap<LoxString, ManagedPtr<Object>>>> = OnceCell::new();
+pub fn strings() -> &'static Mutex<HashMap<LoxString, Handle<Object>>> {
+    static HEAP: OnceCell<Mutex<HashMap<LoxString, Handle<Object>>>> = OnceCell::new();
     HEAP.get_or_init(|| {
         let mut heap = HashMap::new();
         Mutex::new(heap)
