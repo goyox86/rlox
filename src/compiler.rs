@@ -6,11 +6,10 @@ use strum::FromRepr;
 
 use crate::{
     bytecode::{Chunk, Disassembler, OpCode},
-    object::Object,
     scanner::{Scanner, ScannerError, Token, TokenKind},
     string::String,
     value::Value,
-    vm::{self, Vm},
+    vm::{self, Vm, HEAP},
 };
 
 pub(crate) type ParseFn = fn(&mut CompilerCtx, bool) -> Result<(), CompilerError>;
@@ -404,7 +403,8 @@ fn string(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> 
     let lexeme = ctx.previous.lexeme();
     let chars = &lexeme[1..lexeme.len() - 1];
     let string_obj = String::new(chars);
-    let string_value = Value::Obj(Object::allocate_string(string_obj));
+    let string_value =
+        Value::String(HEAP.with(|heap| heap.borrow_mut().allocate_string(string_obj)));
 
     emit_constant(ctx, string_value);
     Ok(())
@@ -585,7 +585,9 @@ fn or_(ctx: &mut CompilerCtx, can_assign: bool) -> Result<(), CompilerError> {
 fn identifier_constant(ctx: &mut CompilerCtx, token: Token) -> u8 {
     let chars = &ctx.previous.lexeme();
     let string_obj = String::new(chars);
-    let string_value = Value::Obj(Object::allocate_string(string_obj));
+    let string_value =
+        Value::String(HEAP.with(|heap| heap.borrow_mut().allocate_string(string_obj)));
+
     make_constant(ctx, string_value)
 }
 

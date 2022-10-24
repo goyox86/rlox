@@ -2,6 +2,8 @@
 
 mod bytecode;
 mod compiler;
+mod function;
+mod heap;
 mod object;
 mod scanner;
 mod string;

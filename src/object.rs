@@ -6,15 +6,10 @@ use std::{
     string::String as RustString,
 };
 
-use crate::{
-    string::String,
-    value::Value,
-    vm::{heap, strings},
-};
+use crate::{heap::Gc, string::String, value::Value, vm::HEAP};
 
 /// A pointer to values in the Lox heap.
-#[derive(Clone, Eq, PartialOrd, Ord)]
-pub struct Handle<T> {
+pub struct Handle<T: ?Sized> {
     raw: NonNull<T>,
 }
 
@@ -54,87 +49,25 @@ impl<T> DerefMut for Handle<T> {
     }
 }
 
+impl<T> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        Self { raw: self.raw }
+    }
+}
 impl<T: Clone> Copy for Handle<T> {}
+impl<T> Gc for Handle<T> {
+    fn collect(&mut self) {
+        unsafe { drop(Box::from_raw(self.raw.as_ptr())) }
+    }
+}
 unsafe impl<T> Sync for Handle<T> where T: Sync {}
 unsafe impl<T> Send for Handle<T> where T: Send {}
 
 impl<T: Debug> Debug for Handle<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ManagedPtr")
+        f.debug_struct("Handle")
             .field("raw", &self.raw)
             .field("value", unsafe { self.raw.as_ref() })
             .finish()
-    }
-}
-
-/// A Lox object allocated in the Lox heap.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Object {
-    String(String),
-}
-
-impl Object {
-    pub fn allocate(value: Object) -> Handle<Object> {
-        let mut object_ptr = Handle::new(value);
-        let mut heap = heap().lock().unwrap();
-        heap.push_back(object_ptr);
-        object_ptr
-    }
-
-    pub fn allocate_string(string: String) -> Handle<Object> {
-        let mut strings = strings().lock().unwrap();
-
-        match strings.get(&string) {
-            Some(string_ptr) => *string_ptr,
-            None => {
-                let string_ptr = Object::allocate(Object::String(string.clone()));
-                strings.insert(string, string_ptr);
-                string_ptr
-            }
-        }
-    }
-
-    pub fn from_string(string: &str) -> Self {
-        Self::String(String::new(string))
-    }
-
-    #[must_use]
-    pub fn is_string(&self) -> bool {
-        matches!(self, Self::String(..))
-    }
-
-    pub fn as_string(&self) -> Option<&String> {
-        let Self::String(string) = self;
-        Some(string)
-    }
-}
-
-impl Add for &Object {
-    type Output = Object;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Object::String(left), Object::String(right)) => Object::String(left + right),
-        }
-    }
-}
-
-impl Display for Object {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Object::String(object) => write!(f, "{}", object),
-        }
-    }
-}
-
-impl From<Object> for Value {
-    fn from(obj: Object) -> Self {
-        Self::Obj(Object::allocate(obj))
-    }
-}
-
-impl From<String> for Value {
-    fn from(string_obj: String) -> Self {
-        Self::Obj(Object::allocate_string(string_obj))
     }
 }

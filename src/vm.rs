@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::LinkedList;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -9,25 +10,14 @@ use once_cell::sync::OnceCell;
 
 use crate::bytecode::{Chunk, Disassembler, OpCode};
 use crate::compiler::{Compiler, CompilerError, CompilerOptions};
-use crate::object::{Handle, Object};
+use crate::heap::Heap;
+use crate::object::Handle;
 use crate::string::String as LoxString;
 use crate::value::Value;
 use rlox_common::{Array, HashMap, Stack};
 
-pub fn heap() -> &'static Mutex<LinkedList<Handle<Object>>> {
-    static HEAP: OnceCell<Mutex<LinkedList<Handle<Object>>>> = OnceCell::new();
-    HEAP.get_or_init(|| {
-        let mut heap = LinkedList::new();
-        Mutex::new(heap)
-    })
-}
-
-pub fn strings() -> &'static Mutex<HashMap<LoxString, Handle<Object>>> {
-    static HEAP: OnceCell<Mutex<HashMap<LoxString, Handle<Object>>>> = OnceCell::new();
-    HEAP.get_or_init(|| {
-        let mut heap = HashMap::new();
-        Mutex::new(heap)
-    })
+thread_local! {
+    pub(crate) static HEAP: RefCell<Heap> = RefCell::new(Heap::new());
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -173,9 +163,9 @@ impl Vm {
 
     #[inline]
     fn read_string(&mut self) -> LoxString {
-        let string = self.read_constant();
-        let string = string.as_obj().unwrap().as_string().unwrap();
-        string.clone()
+        let constant = self.read_constant();
+        let string = constant.as_string().unwrap();
+        (**string).clone()
     }
 
     #[inline]
@@ -219,14 +209,6 @@ impl Vm {
         let instruction = self.current_instruction_offset();
 
         self.chunk.as_ref().unwrap().lines()[instruction]
-    }
-
-    pub fn free_objects(&mut self) {
-        let mut heap = heap().lock().unwrap();
-        while let Some(mut object_ptr) = heap.pop_back() {
-            let object = unsafe { Box::from_raw(object_ptr.as_ptr()) };
-            drop(object);
-        }
     }
 
     fn print_stack(&self) {
@@ -285,12 +267,6 @@ impl Vm {
             msg: message.to_string(),
             line: self.chunk.as_ref().unwrap().lines()[instruction],
         })
-    }
-}
-
-impl Drop for Vm {
-    fn drop(&mut self) {
-        self.free_objects();
     }
 }
 

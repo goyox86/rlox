@@ -6,16 +6,17 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use crate::object::{Handle, Object};
 use crate::string::String;
-use crate::vm;
+use crate::vm::{self, HEAP};
+use crate::{function::Function, object::Handle};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
     Nil,
-    Obj(Handle<Object>),
+    String(Handle<String>),
+    Function(Handle<Function>),
 }
 
 impl Value {
@@ -52,16 +53,8 @@ impl Value {
     }
 
     #[inline]
-    pub fn is_obj(&self) -> bool {
-        matches!(self, Self::Obj(..))
-    }
-
-    #[inline]
     pub fn is_string(&self) -> bool {
-        match self {
-            Value::Obj(obj) => obj.is_string(),
-            _ => false,
-        }
+        matches!(self, Self::String(..))
     }
 
     #[inline]
@@ -80,8 +73,8 @@ impl Value {
         }
     }
 
-    pub fn as_obj(&self) -> Option<&Handle<Object>> {
-        if let Self::Obj(v) = self {
+    pub fn as_string(&self) -> Option<&Handle<String>> {
+        if let Self::String(v) = self {
             Some(v)
         } else {
             None
@@ -95,7 +88,8 @@ impl fmt::Display for Value {
             Value::Number(inner) => write!(f, "{}", inner),
             Value::Boolean(inner) => write!(f, "{}", inner),
             Value::Nil => write!(f, "nil"),
-            Value::Obj(obj) => write!(f, "{}", **obj),
+            Value::String(obj) => write!(f, "{}", **obj),
+            Value::Function(function) => write!(f, "{}", **function),
         }
     }
 }
@@ -108,7 +102,8 @@ impl Neg for Value {
             Self::Number(number) => Self::Number(-number),
             Value::Boolean(_) => panic!("unsupported integer negation for booleans"),
             Value::Nil => panic!("unsupported integer negation for Nil"),
-            Value::Obj(_) => panic!("unsupported integer negation for objects"),
+            Value::String(_) => panic!("unsupported integer negation for string objects"),
+            Value::Function(_) => panic!("unsupported integer negation for function objects"),
         }
     }
 }
@@ -121,7 +116,7 @@ impl Add for Value {
             (Value::Number(number), Value::Number(rhs_number)) => {
                 Value::Number(number + rhs_number)
             }
-            (Value::Obj(left), Value::Obj(right)) => {
+            (Value::String(left), Value::String(right)) => {
                 let new_obj = &*left + &*right;
                 Value::from(new_obj)
             }
@@ -174,7 +169,7 @@ impl PartialEq for Value {
         match (self, other) {
             (Self::Number(left), Self::Number(right)) => left == right,
             (Self::Boolean(left), Self::Boolean(right)) => left == right,
-            (Self::Obj(left), Self::Obj(right)) => left == right,
+            (Self::String(left), Self::String(right)) => left == right,
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
     }
@@ -185,7 +180,7 @@ impl PartialOrd for Value {
         match (self, other) {
             (Self::Number(left), Self::Number(right)) => left.partial_cmp(right),
             (Self::Boolean(left), Self::Boolean(right)) => left.partial_cmp(right),
-            (Self::Obj(left), Self::Obj(right)) => left.partial_cmp(right),
+            (Self::String(left), Self::String(right)) => left.partial_cmp(right),
             (left, right) => left.partial_cmp(right),
         }
     }
@@ -205,8 +200,17 @@ impl From<bool> for Value {
     }
 }
 
+impl From<String> for Value {
+    fn from(string_obj: String) -> Self {
+        let string_handle = HEAP.with(|heap| heap.borrow_mut().allocate_string(string_obj));
+        Self::String(string_handle)
+    }
+}
+
 impl From<&str> for Value {
-    fn from(inner: &str) -> Self {
-        Self::Obj(Object::allocate_string(String::new(inner)))
+    fn from(string: &str) -> Self {
+        let string_handle =
+            HEAP.with(|heap| heap.borrow_mut().allocate_string(String::new(string)));
+        Self::String(string_handle)
     }
 }
