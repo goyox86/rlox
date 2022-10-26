@@ -6,10 +6,10 @@ use std::{
     string::String as RustString,
 };
 
-use crate::{heap::Gc, string::String, value::Value, vm::HEAP};
+use crate::{string::String, value::Value, vm::HEAP};
 
 /// A pointer to values in the Lox heap.
-pub struct Handle<T: ?Sized> {
+pub struct Handle<T> {
     raw: NonNull<T>,
 }
 
@@ -54,12 +54,8 @@ impl<T> Clone for Handle<T> {
         Self { raw: self.raw }
     }
 }
+
 impl<T: Clone> Copy for Handle<T> {}
-impl<T> Gc for Handle<T> {
-    fn collect(&mut self) {
-        unsafe { drop(Box::from_raw(self.raw.as_ptr())) }
-    }
-}
 unsafe impl<T> Sync for Handle<T> where T: Sync {}
 unsafe impl<T> Send for Handle<T> where T: Send {}
 

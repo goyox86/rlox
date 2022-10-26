@@ -3,15 +3,12 @@ use std::{collections::LinkedList, sync::Mutex};
 
 use rlox_common::HashMap;
 
+use crate::function::Function;
 use crate::object::Handle;
 use crate::string::String;
 
-pub(crate) trait Gc {
-    fn collect(&mut self);
-}
-
 pub(crate) struct Heap {
-    objects: Vec<Box<dyn Gc>>,
+    objects: Vec<Box<dyn Any>>,
     strings: HashMap<String, Handle<String>>,
 }
 
@@ -35,7 +32,7 @@ impl Heap {
         let new_string_handle = self.allocate(string.clone());
 
         match self.strings.get(&string) {
-            Some(string_ptr) => *string_ptr,
+            Some(string_handle) => *string_handle,
             None => {
                 self.strings.insert(string, new_string_handle);
                 new_string_handle
@@ -44,10 +41,25 @@ impl Heap {
     }
 }
 
+// The WAT?
 impl Drop for Heap {
     fn drop(&mut self) {
-        while let Some(mut handle) = self.objects.pop() {
-            handle.collect();
+        unsafe {
+            while let Some(mut boxed_handle) = self.objects.pop() {
+                match boxed_handle.downcast_mut::<Handle<String>>() {
+                    Some(string_handle) => {
+                        let _ = Box::from_raw(string_handle.as_ptr());
+                        continue;
+                    }
+                    None => {
+                        if let Some(function_handle) =
+                            boxed_handle.downcast_mut::<Handle<Function>>()
+                        {
+                            let _ = Box::from_raw(function_handle.as_ptr());
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -61,8 +73,14 @@ mod tests {
     #[test]
     fn store_multiple_types() {
         let mut heap = Heap::new();
-        let s = heap.allocate(String::new("Yo!"));
-        let f = heap.allocate(Function::new(None, None));
+        let mut s = heap.allocate(String::new("Yo!"));
+        let mut f = heap.allocate(Function::new(None, None));
+        let g = f;
+        let h = g;
+
         println!("{}", *s);
+        println!("{}", *f);
+        println!("{}", *h);
+        println!("{}", *g);
     }
 }

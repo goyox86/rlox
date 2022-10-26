@@ -4,7 +4,6 @@ use std::{
     string::String as RustString,
 };
 
-use crate::heap::Gc;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct String {
     inner: RustString,
