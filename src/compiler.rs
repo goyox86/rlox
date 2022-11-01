@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use rlox_common::Array;
-use rustc_hash::FxHashMap;
 use strum::FromRepr;
 
 use crate::{
@@ -30,9 +29,6 @@ impl ParseRule {
         self.2
     }
 }
-
-/// Table of fuction pointers used by the Pratt parser.
-type ParseRules = FxHashMap<TokenKind, ParseRule>;
 
 /// From lowest to higest precedence.
 #[derive(Copy, FromRepr, Clone, Debug, Default, PartialEq, PartialOrd)]
