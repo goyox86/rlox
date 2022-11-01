@@ -117,7 +117,6 @@ pub(crate) struct CompilerCtx<'source> {
     previous: Token<'source>,
     current: Token<'source>,
     scanner: Scanner<'source>,
-    parse_rules: ParseRules,
     had_error: bool,
     panic_mode: bool,
     options: Option<&'source CompilerOptions>,
@@ -136,124 +135,10 @@ impl<'source> CompilerCtx<'source> {
             scanner: Scanner::new(source),
             had_error: false,
             panic_mode: false,
-            parse_rules: Self::create_parse_rules(),
             local_count: 0,
             scope_depth: 0,
             locals: Array::new(),
         }
-    }
-
-    fn create_parse_rules() -> ParseRules {
-        let mut rules = FxHashMap::default();
-        rules.insert(
-            TokenKind::LeftParen,
-            ParseRule(Some(grouping), None, Precedence::None),
-        );
-        rules.insert(
-            TokenKind::RightParen,
-            ParseRule(None, None, Precedence::None),
-        );
-        rules.insert(
-            TokenKind::LeftBrace,
-            ParseRule(None, None, Precedence::None),
-        );
-        rules.insert(
-            TokenKind::RightBrace,
-            ParseRule(None, None, Precedence::None),
-        );
-        rules.insert(TokenKind::Comma, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Dot, ParseRule(None, None, Precedence::None));
-        rules.insert(
-            TokenKind::Minus,
-            ParseRule(Some(unary), Some(binary), Precedence::Term),
-        );
-        rules.insert(
-            TokenKind::Plus,
-            ParseRule(None, Some(binary), Precedence::Term),
-        );
-        rules.insert(
-            TokenKind::Semicolon,
-            ParseRule(None, None, Precedence::None),
-        );
-        rules.insert(
-            TokenKind::Slash,
-            ParseRule(None, Some(binary), Precedence::Factor),
-        );
-        rules.insert(
-            TokenKind::Star,
-            ParseRule(None, Some(binary), Precedence::Factor),
-        );
-        rules.insert(
-            TokenKind::Bang,
-            ParseRule(Some(unary), None, Precedence::None),
-        );
-        rules.insert(
-            TokenKind::BangEqual,
-            ParseRule(None, Some(binary), Precedence::Equality),
-        );
-        rules.insert(TokenKind::Equal, ParseRule(None, None, Precedence::None));
-        rules.insert(
-            TokenKind::EqualEqual,
-            ParseRule(None, Some(binary), Precedence::Equality),
-        );
-        rules.insert(
-            TokenKind::Greater,
-            ParseRule(None, Some(binary), Precedence::Comparison),
-        );
-        rules.insert(
-            TokenKind::GreaterEqual,
-            ParseRule(None, Some(binary), Precedence::Comparison),
-        );
-        rules.insert(
-            TokenKind::Less,
-            ParseRule(None, Some(binary), Precedence::Comparison),
-        );
-        rules.insert(
-            TokenKind::LessEqual,
-            ParseRule(None, Some(binary), Precedence::Comparison),
-        );
-        rules.insert(
-            TokenKind::Identifier,
-            ParseRule(Some(variable), None, Precedence::None),
-        );
-        rules.insert(
-            TokenKind::String,
-            ParseRule(Some(string), None, Precedence::None),
-        );
-        rules.insert(
-            TokenKind::Number,
-            ParseRule(Some(number), None, Precedence::None),
-        );
-        rules.insert(TokenKind::And, ParseRule(None, Some(and_), Precedence::And));
-        rules.insert(TokenKind::Class, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Else, ParseRule(None, None, Precedence::None));
-        rules.insert(
-            TokenKind::False,
-            ParseRule(Some(literal), None, Precedence::None),
-        );
-        rules.insert(TokenKind::For, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Fun, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::If, ParseRule(None, None, Precedence::None));
-        rules.insert(
-            TokenKind::Nil,
-            ParseRule(Some(literal), None, Precedence::None),
-        );
-        rules.insert(TokenKind::Or, ParseRule(None, Some(or_), Precedence::Or));
-        rules.insert(TokenKind::Print, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Return, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Super, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::This, ParseRule(None, None, Precedence::None));
-        rules.insert(
-            TokenKind::True,
-            ParseRule(Some(literal), None, Precedence::None),
-        );
-        rules.insert(TokenKind::Var, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::While, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Comment, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Eof, ParseRule(None, None, Precedence::None));
-        rules.insert(TokenKind::Dummy, ParseRule(None, None, Precedence::None));
-
-        rules
     }
 }
 
@@ -712,7 +597,49 @@ fn parse_precedence(ctx: &mut CompilerCtx, precedence: Precedence) -> Result<(),
 fn get_parse_rule(ctx: &mut CompilerCtx, token_kind: TokenKind) -> ParseRule {
     assert_ne!(token_kind, TokenKind::Dummy);
 
-    *ctx.parse_rules.get(&token_kind).unwrap()
+    match token_kind {
+        TokenKind::LeftParen => ParseRule(Some(grouping), None, Precedence::None),
+        TokenKind::RightParen => ParseRule(None, None, Precedence::None),
+        TokenKind::LeftBrace => ParseRule(None, None, Precedence::None),
+        TokenKind::RightBrace => ParseRule(None, None, Precedence::None),
+        TokenKind::Comma => ParseRule(None, None, Precedence::None),
+        TokenKind::Dot => ParseRule(None, None, Precedence::None),
+        TokenKind::Minus => ParseRule(Some(unary), Some(binary), Precedence::Term),
+        TokenKind::Plus => ParseRule(None, Some(binary), Precedence::Term),
+        TokenKind::Semicolon => ParseRule(None, None, Precedence::None),
+        TokenKind::Slash => ParseRule(None, Some(binary), Precedence::Factor),
+        TokenKind::Star => ParseRule(None, Some(binary), Precedence::Factor),
+        TokenKind::Bang => ParseRule(Some(unary), None, Precedence::None),
+        TokenKind::BangEqual => ParseRule(None, Some(binary), Precedence::Equality),
+        TokenKind::Equal => ParseRule(None, None, Precedence::None),
+        TokenKind::EqualEqual => ParseRule(None, Some(binary), Precedence::Equality),
+        TokenKind::Greater => ParseRule(None, Some(binary), Precedence::Comparison),
+        TokenKind::GreaterEqual => ParseRule(None, Some(binary), Precedence::Comparison),
+        TokenKind::Less => ParseRule(None, Some(binary), Precedence::Comparison),
+        TokenKind::LessEqual => ParseRule(None, Some(binary), Precedence::Comparison),
+        TokenKind::Identifier => ParseRule(Some(variable), None, Precedence::None),
+        TokenKind::String => ParseRule(Some(string), None, Precedence::None),
+        TokenKind::Number => ParseRule(Some(number), None, Precedence::None),
+        TokenKind::And => ParseRule(None, Some(and_), Precedence::And),
+        TokenKind::Class => ParseRule(None, None, Precedence::None),
+        TokenKind::Else => ParseRule(None, None, Precedence::None),
+        TokenKind::False => ParseRule(Some(literal), None, Precedence::None),
+        TokenKind::For => ParseRule(None, None, Precedence::None),
+        TokenKind::Fun => ParseRule(None, None, Precedence::None),
+        TokenKind::If => ParseRule(None, None, Precedence::None),
+        TokenKind::Nil => ParseRule(Some(literal), None, Precedence::None),
+        TokenKind::Or => ParseRule(None, Some(or_), Precedence::Or),
+        TokenKind::Print => ParseRule(None, None, Precedence::None),
+        TokenKind::Return => ParseRule(None, None, Precedence::None),
+        TokenKind::Super => ParseRule(None, None, Precedence::None),
+        TokenKind::This => ParseRule(None, None, Precedence::None),
+        TokenKind::True => ParseRule(Some(literal), None, Precedence::None),
+        TokenKind::Var => ParseRule(None, None, Precedence::None),
+        TokenKind::While => ParseRule(None, None, Precedence::None),
+        TokenKind::Comment => ParseRule(None, None, Precedence::None),
+        TokenKind::Eof => ParseRule(None, None, Precedence::None),
+        TokenKind::Dummy => ParseRule(None, None, Precedence::None),
+    }
 }
 
 #[inline(always)]
